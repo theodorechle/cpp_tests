@@ -35,22 +35,32 @@ namespace test {
     }
 
     void Tests::parentCode(int _pipe, pid_t childPid, const std::string &testName) {
+        int tmpChildStatus;
         int childStatus;
         char buffer[PIPE_BUFFER_SIZE];
         Result result;
 
         startTest(testName);
-        if (waitpid(childPid, &childStatus, 0) == -1) {
-            perror((std::string("Error while waiting child '") + std::to_string((int)childPid) + "'").c_str());
+        pid_t error = waitpid(childPid, &tmpChildStatus, 0);
+        if (error == -1) {
+            perror((std::string("Error while waiting child '") + std::to_string(static_cast<int>(childPid)) + "'").c_str());
+            exit(errno);
+        }
+        childStatus = WEXITSTATUS(tmpChildStatus);
+        if (!WIFEXITED(tmpChildStatus)) {
+            perror((std::string("Child '") + std::to_string(static_cast<int>(childPid)) + "' exited with code" + std::to_string(childStatus)).c_str());
             exit(errno);
         }
 
-        if (childStatus < 0 || childStatus > NB_RESULT_TYPES) throw TestError("Test returned an invalid result.");
-        result = static_cast<Result>(childStatus);
+        if (childStatus < 0 || childStatus >= static_cast<int>(Result::NB_RESULT_TYPES)) {
+            std::cerr << "Test returned an invalid result.\n";
+            result = Result::FAILURE;
+        }
+        else result = static_cast<Result>(childStatus);
         if (result != Result::SUCCESS) {
             displayBlocks();
             displayTest(currentBlock->results.back());
-            std::cout << "Logs:\n";
+            std::cout << "LOGS:\n";
             bool reading = true;
             while (reading) {
                 ssize_t readSize = read(_pipe, buffer, PIPE_BUFFER_SIZE);
@@ -99,7 +109,7 @@ namespace test {
             close(_pipe[0]);
             dup2(_pipe[1], STDOUT_FILENO);
             dup2(_pipe[1], STDERR_FILENO);
-            exit((int)f());
+            exit(static_cast<int>(f()));
         default:
             close(_pipe[1]);
             parentCode(_pipe[0], childPid, testName);
@@ -135,21 +145,16 @@ namespace test {
 
     void Tests::displayBlocks() const {
         TestBlock *block = currentBlock;
-        int tabs = 1;
-        if (block != rootBlock) {
-            std::cout << "'" << block->name << "'\n";
-            block = block->parentBlock;
-        }
-
+        int tabs = 0;
         while (block != rootBlock) {
             displayTabs(tabs);
-            std::cout << "in '" << block->name << "'\n";
+            std::cout << "in block '" << block->name << "'\n";
             block = block->parentBlock;
         }
     }
 
     void Tests::displayTest(const Test &test) const {
-        std::cout << "Test n°" << test.number << "(" << test.name << "): " << resultToStrColored(test.result) << "\n";
+        std::cout << "Test n°" << test.number << " (" << test.name << "): " << resultToStrColored(test.result) << "\n";
     }
 
     void Tests::displayTestWithChrono(const Test &test, int testsNbSize) const {

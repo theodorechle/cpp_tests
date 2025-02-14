@@ -21,14 +21,12 @@ namespace test {
     const std::string TEST_RESULT_GREEN = "\e[32m";
     const std::string TEST_RESULT_END = "\e[0m";
 
-    // if modified, update NB_RESULT_TYPES
     enum class Result {
         SUCCESS,
         FAILURE,
-        ERROR
+        ERROR,
+        NB_RESULT_TYPES
     };
-
-    const int NB_RESULT_TYPES = 3;
 
     class TestError : public std::exception {
         std::string message;
