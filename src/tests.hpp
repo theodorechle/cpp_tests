@@ -5,128 +5,125 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <list>
 #include <sstream>
 #include <string>
 #include <sys/stat.h>
+#include <wait.h>
 
 namespace test {
+    constexpr size_t PIPE_BUFFER_SIZE = 255;
 
+    // bash colors (not standard to all shells)
+    const std::string TEST_RESULT_RED = "\e[31m";
+    const std::string TEST_RESULT_GREEN = "\e[32m";
+    const std::string TEST_RESULT_END = "\e[0m";
+
+    // if modified, update NB_RESULT_TYPES
     enum class Result {
-        OK,
-        KO,
-        ERROR,
-        NOT_GIVEN,
+        SUCCESS,
+        FAILURE,
+        ERROR
     };
 
-    /**
-     * To use this class, you must create a subclass of it and use this subclass.
-     * The tests must be written by overriding the 'tests' method;
-     * To run the tests, call runTests.
-     * Every new test method must call startTest at the beginning of the method and endTest at the end.
-     *
-     * Notice that if a non-catchable error such as a segfault or a stack overflow is raised, the program will crash.
-     *
-     * A temporary file used by the class may not be erased.
-     * If the program crash, this file could not be erased.
-     * This file is used to register all log messages of a test and is read after the test execution to display it if the test fails.
-     * This default behavior can be changed.
-     *
-     * If it's specified to always show log messages, all messages will be displayed when they are written.
-     * If it's not, they will be shown only when a test ends.
-     * If it's specified to not show log messages, they will not be registered and shown even if it's specified to always show log messages.
-     *
-     * "check" functions should returns a Result and "test" functions should starts and ends a test.
-     */
+    const int NB_RESULT_TYPES = 3;
+
+    class TestError : public std::exception {
+        std::string message;
+
+    public:
+        TestError(const std::string &message) : message{message} {};
+        const char *what() const noexcept override { return message.c_str(); }
+    };
+
     class Tests {
-        // TODO: add blocks of tests
-        // TODO: run tests in other process to ensure not crashing
-        // TODO: find a way to run a test in a simpler way (something like python decorators (maybe a macro))
-        // TODO: tests summaries are not aligned when more than 10 tests
-        // TODO: ask for a tmp file
-        std::string testsName;
+        typedef struct testStats {
+            size_t nbTests;
+            size_t nbSuccesses;
+            size_t nbFailures;
+            size_t nbErrors;
+        } Stats;
+
         const int NB_SPACES_BEFORE_CHRONO = 9;
-        const int NB_SPACES_BEFORE_TEST_DESCRIPTION = 8;
+        const int CHRONO_FLOAT_SIZE = 8;
 
-        std::list<std::tuple<std::string, Result, float>> results;
-        std::string logFileName = "/tmp/logFile";
-        std::ofstream logFile = std::ofstream();
-        bool testsRunning = false;
-        bool showLogMessages = true;
-        bool alwaysShowLogMessages = false;
-        std::chrono::_V2::system_clock::time_point startAllTestsTime;
-        std::chrono::_V2::system_clock::time_point endAllTestsTime;
-        std::chrono::_V2::system_clock::time_point startSingleTestTime;
-        std::streambuf *oldErrBuffer = nullptr;
-        std::streambuf *oldOutBuffer = nullptr;
+        typedef struct testResult {
+            std::string name;
+            size_t number;
+            Result result;
+            double time;
+        } Test;
 
-        bool openFile();
-        bool closeFile();
+        typedef struct testBlock {
+            std::string name;
+            std::list<Test> results = std::list<Test>();
+            std::list<testBlock> innerBlocks = std::list<testBlock>();
+            double time = .0;
+            testBlock *parentBlock;
+            std::chrono::_V2::system_clock::time_point startedTimer;
 
-        /**
-         * Starts a test session
-         */
-        bool startTestSession();
+            testBlock(const std::string &name, testBlock *parentBlock = nullptr)
+                : name{name}, parentBlock{parentBlock}, startedTimer{std::chrono::high_resolution_clock::now()} {}
+        } TestBlock;
 
-        /**
-         * Ends a test session
-         */
-        bool endTestSession();
+        TestBlock *rootBlock = new TestBlock("");
+        TestBlock *currentBlock = rootBlock;
 
-        size_t getTestNumber() const { return results.size(); }
+        bool testsStarted = false;
+        bool testRunning = false;
+        std::chrono::_V2::system_clock::time_point startedSingleTestTimer;
+
+        std::chrono::_V2::system_clock::time_point startedGlobalTestsTimer;
+        double totalTime = .0;
 
         std::string resultToStr(Result result) const;
-        void displaySummary() const;
 
-        void redirectStandardOutput();
-        void redirectErrorOutput();
-        void resetStandardOutput();
-        void resetErrorOutput();
+        std::string resultToStrColored(Result result) const;
 
-    protected:
+        void displayBlocks() const;
+        void displayTest(const Test &test) const;
+        void displayTestWithChrono(const Test &test, int testsNbSize) const;
+        void displayGlobalStats() const;
+
+        void displayBlocksSummary(const TestBlock *blockToDisplay, int tabs = 0) const;
+        void displayTabs(int tabs) const;
+
         /**
          * Starts a test.
          * Must be called before each test.
          *
          */
-        void startTest(const std::string &testName = "");
+        void startTest(const std::string &name = "");
 
         /**
          * Ends a test.
          * Must be called after each test.
          */
-        void endTest(Result result = Result::NOT_GIVEN);
-        static std::string getFileContent(std::string fileName);
-        virtual void tests() = 0;
+        void endTest(Result result);
+
+        void parentCode(int _pipe, pid_t childPid, const std::string &testName);
+
+        void getStats(Stats *stats, TestBlock *testBlock) const;
 
     public:
-        Tests(const std::string &testsName) : testsName{testsName} {}
-
-        virtual ~Tests() {};
-
-        bool runTests();
+        ~Tests();
+        void start();
+        void stop();
 
         /**
-         * By default the file name is "logFile" but you can change it by calling this method with a new file name.
-         * Note that this file will only be used if tests are not running and if the file does not already exists.
+         * If a test is running, raises a TestError.
          */
-        void setLogFile(const std::string &newFileName);
+        void beginTestBlock(const std::string &name);
 
         /**
-         * If false, will never show log messages even if specified to always show log messages.
+         * If a test is running or if there is no block to close, raises a TestError.
          */
-        void showLogs(bool show);
-        bool showLogs() const;
+        void endTestBlock();
 
-        /**
-         * If true, every log message will be written, all messages will be displayed when they are written.
-         * If false, they will be shown only when a test ends.
-         */
-        void alwaysShowLogs(bool alwaysShow);
-        bool alwaysShowLogs() const;
-
-        int getNbErrors() const;
+        void runTest(Result (*f)(void), const std::string &testName = "");
+        void displaySummary();
     };
 
 } // namespace test
