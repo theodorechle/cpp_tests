@@ -31,6 +31,20 @@ namespace test {
         Test &test = currentBlock->results.back();
         test.time = std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - startedSingleTestTimer).count();
         test.result = result;
+        stats.nbTests++;
+        switch (result) {
+        case Result::SUCCESS:
+            stats.nbSuccesses++;
+            break;
+        case Result::FAILURE:
+            stats.nbFailures++;
+            break;
+        case Result::ERROR:
+            stats.nbErrors++;
+            break;
+        default:
+            break;
+        }
         testRunning = false;
     }
 
@@ -48,7 +62,8 @@ namespace test {
         }
         childStatus = WEXITSTATUS(tmpChildStatus);
         if (!WIFEXITED(tmpChildStatus)) {
-            perror((std::string("Child '") + std::to_string(static_cast<int>(childPid)) + "' exited with code" + std::to_string(childStatus)).c_str());
+            perror(
+                (std::string("Child '") + std::to_string(static_cast<int>(childPid)) + "' exited with code" + std::to_string(childStatus)).c_str());
             exit(errno);
         }
 
@@ -167,8 +182,6 @@ namespace test {
     }
 
     void Tests::displayGlobalStats() const {
-        Stats stats = Stats{0, 0, 0, 0};
-        getStats(&stats, rootBlock);
         std::cout << "Global stats:\n";
         std::cout << stats.nbTests << " tests in " << std::fixed << std::setprecision(CHRONO_FLOAT_SIZE) << totalTime << "s\n";
         std::cout << "Successes: " << stats.nbSuccesses << "\n";
@@ -208,32 +221,11 @@ namespace test {
         displayGlobalStats();
     }
 
+    bool Tests::allTestsPassed() { return stats.nbSuccesses == stats.nbTests; }
+
     void Tests::displayTabs(int tabs) const {
         for (int tab = 0; tab < tabs; tab++)
             std::cout << '\t';
-    }
-
-    void Tests::getStats(Stats *stats, TestBlock *testBlock) const {
-        if (stats == nullptr) return;
-        stats->nbTests += testBlock->results.size();
-        for (Test &test : testBlock->results) {
-            switch (test.result) {
-            case Result::SUCCESS:
-                stats->nbSuccesses++;
-                break;
-            case Result::FAILURE:
-                stats->nbFailures++;
-                break;
-            case Result::ERROR:
-                stats->nbErrors++;
-                break;
-            default:
-                break;
-            }
-        }
-        for (TestBlock &childBlock : testBlock->innerBlocks) {
-            getStats(stats, &childBlock);
-        }
     }
 
 } // namespace test

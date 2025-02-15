@@ -37,12 +37,12 @@ namespace test {
     };
 
     class Tests {
-        typedef struct testStats {
+        struct testStats {
             size_t nbTests;
             size_t nbSuccesses;
             size_t nbFailures;
             size_t nbErrors;
-        } Stats;
+        } stats = {0, 0, 0, 0};
 
         const int NB_SPACES_BEFORE_CHRONO = 9;
         const int CHRONO_FLOAT_SIZE = 8;
@@ -103,8 +103,6 @@ namespace test {
 
         void parentCode(int _pipe, pid_t childPid, const std::string &testName);
 
-        void getStats(Stats *stats, TestBlock *testBlock) const;
-
     public:
         ~Tests();
         void start();
@@ -122,6 +120,8 @@ namespace test {
 
         void runTest(Result (*f)(void), const std::string &testName = "");
         void displaySummary();
+
+        bool allTestsPassed();
     };
 
 } // namespace test
