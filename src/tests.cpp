@@ -174,9 +174,9 @@ namespace test {
 
     void Tests::displayTestWithChrono(const Test &test, int testsNbSize) const {
         std::string result = resultToStrColored(test.result);
-
-        std::cout << "Test n°" << test.number << ": " << result;
-        std::cout << std::string(NB_SPACES_BEFORE_CHRONO - testsNbSize + result.size() - result.size(), ' ') << " " << std::fixed
+        std::string testNumberString = std::to_string(test.number);
+        std::cout << "Test n°" << test.number << std::string(testsNbSize - testNumberString.size(), ' ') << ": " << result;
+        std::cout << std::string(NB_SPACES_BEFORE_CHRONO - resultToStr(test.result).size(), ' ') << " " << std::fixed
                   << std::setprecision(CHRONO_FLOAT_SIZE) << test.time << "s";
         std::cout << " (" << test.name << ") " << "\n";
     }
@@ -192,23 +192,19 @@ namespace test {
     void Tests::displayBlocksSummary(const TestBlock *blockToDisplay, int tabs) const {
         size_t index = 0;
 
-        displayTabs(tabs - 1);
-
         std::cout << blockToDisplay->name << ": " << std::fixed << std::setprecision(CHRONO_FLOAT_SIZE) << blockToDisplay->time << "s\n";
 
         int testsNbSize = std::to_string(blockToDisplay->results.size()).size(); // for a nice formatting
         for (const Test &testToDisplay : blockToDisplay->results) {
-            displayTabs(tabs);
-            std::cout << "| ";
+            displayTabsAndPipe(tabs);
             displayTestWithChrono(testToDisplay, testsNbSize);
         }
         for (const TestBlock &innerBlock : blockToDisplay->innerBlocks) {
-            displayTabs(tabs);
-            std::cout << "| ";
+            displayTabsAndPipe(tabs);
             displayBlocksSummary(&innerBlock, tabs + 1);
         }
 
-        displayTabs(tabs - 1);
+        displayTabsAndPipe(tabs - 1);
         std::cout << "(" << blockToDisplay->name << ")\n";
         index++;
     }
@@ -216,7 +212,7 @@ namespace test {
     void Tests::displaySummary() {
         std::cout << "Summary:\n";
         for (const TestBlock &innerBlock : rootBlock->innerBlocks) {
-            displayBlocksSummary(&innerBlock, 1);
+            displayBlocksSummary(&innerBlock, 0);
         }
         displayGlobalStats();
     }
@@ -226,6 +222,12 @@ namespace test {
     void Tests::displayTabs(int tabs) const {
         for (int tab = 0; tab < tabs; tab++)
             std::cout << '\t';
+    }
+
+    void Tests::displayTabsAndPipe(int tabs) const {
+        for (int tab = 0; tab < tabs; tab++)
+            std::cout << '\t';
+        if (tabs >= 0) std::cout << "| ";
     }
 
 } // namespace test

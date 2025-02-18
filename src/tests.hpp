@@ -13,6 +13,8 @@
 #include <sys/stat.h>
 #include <wait.h>
 
+#define DEBUG
+
 namespace test {
     constexpr size_t PIPE_BUFFER_SIZE = 255;
 
@@ -87,6 +89,8 @@ namespace test {
 
         void displayBlocksSummary(const TestBlock *blockToDisplay, int tabs = 0) const;
         void displayTabs(int tabs) const;
+
+        void displayTabsAndPipe(int tabs) const;
 
         /**
          * Starts a test.
