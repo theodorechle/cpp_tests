@@ -12,7 +12,7 @@ namespace test {
         if (!testsStarted) throw TestError("Can't end a block while tests are not started.");
         if (testRunning) throw TestError("Can't end a block while a test is running.");
         if (currentBlock == rootBlock) throw TestError("There is no block to close.");
-        currentBlock->time = std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - currentBlock->startedTimer).count();
+        currentBlock->time = std::chrono::duration<double>(std::chrono::steady_clock::now() - currentBlock->startedTimer).count();
         currentBlock = currentBlock->parentBlock;
     }
 
@@ -176,8 +176,13 @@ namespace test {
         std::string result = resultToStrColored(test.result);
         std::string testNumberString = std::to_string(test.number);
         std::cout << "Test n°" << test.number << std::string(testsNbSize - testNumberString.size(), ' ') << ": " << result;
-        std::cout << std::string(NB_SPACES_BEFORE_CHRONO - resultToStr(test.result).size(), ' ') << " " << std::fixed
-                  << std::setprecision(CHRONO_FLOAT_SIZE) << test.time << "s";
+        std::cout
+            << std::string(NB_SPACES_BEFORE_CHRONO - resultToStr(test.result).size(), ' ')
+            << " "
+            << std::fixed
+            << std::setprecision(CHRONO_FLOAT_SIZE)
+            << test.time
+            << "s";
         std::cout << " (" << test.name << ") " << "\n";
     }
 

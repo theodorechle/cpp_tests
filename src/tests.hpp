@@ -22,12 +22,7 @@ namespace test {
     const std::string TEST_RESULT_GREEN = "\e[32m";
     const std::string TEST_RESULT_END = "\e[0m";
 
-    enum class Result {
-        SUCCESS,
-        FAILURE,
-        ERROR,
-        NB_RESULT_TYPES
-    };
+    enum class Result { SUCCESS, FAILURE, ERROR, NB_RESULT_TYPES };
 
     class TestError : public std::exception {
         std::string message;
@@ -61,10 +56,10 @@ namespace test {
             std::list<testBlock> innerBlocks = std::list<testBlock>();
             double time = .0;
             testBlock *parentBlock;
-            std::chrono::system_clock::time_point startedTimer;
+            std::chrono::steady_clock::time_point startedTimer;
 
             testBlock(const std::string &name, testBlock *parentBlock = nullptr)
-                : name{name}, parentBlock{parentBlock}, startedTimer{std::chrono::high_resolution_clock::now()} {}
+                : name{name}, parentBlock{parentBlock}, startedTimer{std::chrono::steady_clock::now()} {}
         } TestBlock;
 
         TestBlock *rootBlock = new TestBlock("");
