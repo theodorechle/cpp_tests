@@ -1,7 +1,6 @@
 #ifndef TESTS
 #define TESTS
 
-#include <bits/stdc++.h>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -62,7 +61,7 @@ namespace test {
             std::list<testBlock> innerBlocks = std::list<testBlock>();
             double time = .0;
             testBlock *parentBlock;
-            std::chrono::_V2::system_clock::time_point startedTimer;
+            std::chrono::system_clock::time_point startedTimer;
 
             testBlock(const std::string &name, testBlock *parentBlock = nullptr)
                 : name{name}, parentBlock{parentBlock}, startedTimer{std::chrono::high_resolution_clock::now()} {}
@@ -73,9 +72,9 @@ namespace test {
 
         bool testsStarted = false;
         bool testRunning = false;
-        std::chrono::_V2::system_clock::time_point startedSingleTestTimer;
+        std::chrono::system_clock::time_point startedSingleTestTimer;
 
-        std::chrono::_V2::system_clock::time_point startedGlobalTestsTimer;
+        std::chrono::system_clock::time_point startedGlobalTestsTimer;
         double totalTime = .0;
 
         std::string resultToStr(Result result) const;
