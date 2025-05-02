@@ -67,9 +67,9 @@ namespace test {
 
         bool testsStarted = false;
         bool testRunning = false;
-        std::chrono::system_clock::time_point startedSingleTestTimer;
+        std::chrono::steady_clock::time_point startedSingleTestTimer;
 
-        std::chrono::system_clock::time_point startedGlobalTestsTimer;
+        std::chrono::steady_clock::time_point startedGlobalTestsTimer;
         double totalTime = .0;
 
         std::string resultToStr(Result result) const;

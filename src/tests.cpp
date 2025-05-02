@@ -22,14 +22,14 @@ namespace test {
         if (testRunning) throw TestError("Can't start a test while an other one is running.");
         testRunning = true;
         currentBlock->results.push_back(Test{name, currentBlock->results.size(), Result::FAILURE, .0});
-        startedSingleTestTimer = std::chrono::high_resolution_clock::now();
+        startedSingleTestTimer = std::chrono::steady_clock::now();
     }
 
     void Tests::endTest(Result result) {
         if (!testsStarted) throw TestError("Can't end a test while tests are not started.");
         if (!testRunning) throw TestError("No test to end.");
         Test &test = currentBlock->results.back();
-        test.time = std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - startedSingleTestTimer).count();
+        test.time = std::chrono::duration<double>(std::chrono::steady_clock::now() - startedSingleTestTimer).count();
         test.result = result;
         stats.nbTests++;
         switch (result) {
@@ -99,13 +99,13 @@ namespace test {
     void Tests::start() {
         if (testsStarted) throw TestError("Tests already started.");
         testsStarted = true;
-        startedGlobalTestsTimer = std::chrono::high_resolution_clock::now();
+        startedGlobalTestsTimer = std::chrono::steady_clock::now();
     }
 
     void Tests::stop() {
         if (!testsStarted) throw TestError("Tests already stopped.");
         testsStarted = false;
-        totalTime = std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - startedGlobalTestsTimer).count();
+        totalTime = std::chrono::duration<double>(std::chrono::steady_clock::now() - startedGlobalTestsTimer).count();
     }
 
     void Tests::runTest(Result (*f)(void), const std::string &testName) {
