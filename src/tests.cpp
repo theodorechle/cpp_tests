@@ -195,8 +195,6 @@ namespace test {
     }
 
     void Tests::displayBlocksSummary(const TestBlock *blockToDisplay, int tabs) const {
-        size_t index = 0;
-
         std::cout << blockToDisplay->name << ": " << std::fixed << std::setprecision(CHRONO_FLOAT_SIZE) << blockToDisplay->time << "s\n";
 
         int testsNbSize = std::to_string(blockToDisplay->results.size()).size(); // for a nice formatting
@@ -211,7 +209,6 @@ namespace test {
 
         displayTabsAndPipe(tabs - 1);
         std::cout << "(" << blockToDisplay->name << ")\n";
-        index++;
     }
 
     void Tests::displaySummary() {
