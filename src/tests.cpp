@@ -1,6 +1,8 @@
 #include "tests.hpp"
 
 namespace test {
+    Result booleanToResult(bool value) { return value ? Result::SUCCESS : Result::FAILURE; }
+
     void Tests::beginTestBlock(const std::string &name) {
         if (!testsStarted) throw TestError("Can't open a block while tests are not started.");
         if (testRunning) throw TestError("Can't open a block while a test is running.");
@@ -42,6 +44,9 @@ namespace test {
         case Result::ERROR:
             stats.nbErrors++;
             break;
+        case Result::BAD_RETURN:
+            stats.nbBadReturns++;
+            break;
         default:
             break;
         }
@@ -52,7 +57,7 @@ namespace test {
         int tmpChildStatus;
         int childStatus;
         char buffer[PIPE_BUFFER_SIZE];
-        Result result;
+        Result result = Result::NB_RESULT_TYPES;
 
         startTest(testName);
         pid_t error = waitpid(childPid, &tmpChildStatus, 0);
@@ -60,18 +65,24 @@ namespace test {
             perror((std::string("Error while waiting child '") + std::to_string(static_cast<int>(childPid)) + "'").c_str());
             exit(errno);
         }
-        childStatus = WEXITSTATUS(tmpChildStatus);
-        if (!WIFEXITED(tmpChildStatus)) {
-            perror(
-                (std::string("Child '") + std::to_string(static_cast<int>(childPid)) + "' exited with code" + std::to_string(childStatus)).c_str());
-            exit(errno);
+        if (WIFEXITED(tmpChildStatus)) {
+            childStatus = WEXITSTATUS(tmpChildStatus);
+            if (childStatus < 0 || childStatus >= static_cast<int>(Result::NB_RESULT_TYPES)) {
+                std::cerr << "Child '" << childPid << "'(" << testName << ") exited with code '" << childStatus << "'\n";
+                result = Result::BAD_RETURN;
+            }
         }
-
-        if (childStatus < 0 || childStatus >= static_cast<int>(Result::NB_RESULT_TYPES)) {
-            std::cerr << "Test returned an invalid result.\n";
-            result = Result::FAILURE;
+        else if (WIFSIGNALED(tmpChildStatus)) {
+            int signal = WTERMSIG(tmpChildStatus);
+            std::cerr << "Child '" << childPid << "'(" << testName << ") terminated by signal '" << strsignal(signal) << "'\n";
+            result = Result::BAD_RETURN;
         }
-        else result = static_cast<Result>(childStatus);
+        else std::cerr << "Test returned an invalid result.\n";
+        if (WCOREDUMP((tmpChildStatus))) {
+            std::cerr << "Child '" << childPid << "'(" << testName << ") produced a core dump\n";
+            result = Result::BAD_RETURN;
+        }
+        if (result != Result::BAD_RETURN) result = static_cast<Result>(childStatus);
         if (result != Result::SUCCESS) {
             displayBlocks();
             displayTest(currentBlock->results.back());
@@ -140,6 +151,8 @@ namespace test {
             return "FAILURE";
         case Result::ERROR:
             return "ERROR";
+        case Result::BAD_RETURN:
+            return "BAD_RETURN";
         default:
             return "UNKNOWN";
         }
@@ -153,6 +166,8 @@ namespace test {
             return TEST_RESULT_RED + "FAILURE" + TEST_RESULT_END;
         case Result::ERROR:
             return TEST_RESULT_RED + "ERROR" + TEST_RESULT_END;
+        case Result::BAD_RETURN:
+            return TEST_RESULT_RED + "BAD_RETURN" + TEST_RESULT_END;
         default:
             return TEST_RESULT_RED + "UNKNOWN" + TEST_RESULT_END;
         }
@@ -192,6 +207,7 @@ namespace test {
         std::cout << "Successes: " << stats.nbSuccesses << "\n";
         std::cout << "Failures: " << stats.nbFailures << "\n";
         std::cout << "Errors: " << stats.nbErrors << "\n";
+        std::cout << "Bad returns: " << stats.nbBadReturns << "\n";
     }
 
     void Tests::displayBlocksSummary(const TestBlock *blockToDisplay, int tabs) const {
@@ -231,5 +247,4 @@ namespace test {
             std::cout << '\t';
         if (tabs >= 0) std::cout << "| ";
     }
-
 } // namespace test

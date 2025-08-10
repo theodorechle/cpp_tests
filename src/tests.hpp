@@ -1,5 +1,5 @@
-#ifndef TESTS
-#define TESTS
+#ifndef TESTS_HPP
+#define TESTS_HPP
 
 #include <chrono>
 #include <filesystem>
@@ -8,7 +8,7 @@
 #include <iostream>
 #include <list>
 #include <sstream>
-#include <string>
+#include <string.h>
 #include <sys/stat.h>
 #include <wait.h>
 
@@ -22,7 +22,9 @@ namespace test {
     const std::string TEST_RESULT_GREEN = "\e[32m";
     const std::string TEST_RESULT_END = "\e[0m";
 
-    enum class Result { SUCCESS, FAILURE, ERROR, NB_RESULT_TYPES };
+    enum class Result { SUCCESS, FAILURE, ERROR, BAD_RETURN, NB_RESULT_TYPES };
+
+    Result booleanToResult(bool value);
 
     class TestError : public std::exception {
         std::string message;
@@ -38,9 +40,10 @@ namespace test {
             size_t nbSuccesses;
             size_t nbFailures;
             size_t nbErrors;
-        } stats = {0, 0, 0, 0};
+            size_t nbBadReturns;
+        } stats = {0, 0, 0, 0, 0};
 
-        const int NB_SPACES_BEFORE_CHRONO = 9;
+        const int NB_SPACES_BEFORE_CHRONO = 11;
         const int CHRONO_FLOAT_SIZE = 8;
 
         typedef struct testResult {
@@ -124,4 +127,4 @@ namespace test {
 
 } // namespace test
 
-#endif // TESTS
+#endif // TESTS_HPP
