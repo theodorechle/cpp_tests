@@ -1,5 +1,5 @@
-CC=g++
-CFLAGS=-std=c++17 -Wall -g -MMD -MP
+CPP_C=g++
+CPP_FLAGS=-std=c++17 -Wall -g -MMD -MP
 BIN_DIR=bin
 OBJ_DIR=obj
 SRC_DIR=src
@@ -23,7 +23,7 @@ $(LIB).a: $(OBJ_TESTS)
 # Rule for compiling all object files
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CPP_C) $(CPP_FLAGS) -c $< -o $@
 
 # Clean all generated files
 clean:
