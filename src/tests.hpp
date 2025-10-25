@@ -14,19 +14,30 @@
 
 #define DEBUG
 
-namespace test {
+namespace test
+{
     constexpr size_t PIPE_BUFFER_SIZE = 255;
 
+#ifdef BASH_COLORS
     // bash colors (not standard to all shells)
     const std::string TEST_RESULT_RED = "\e[31m";
     const std::string TEST_RESULT_GREEN = "\e[32m";
     const std::string TEST_RESULT_END = "\e[0m";
+#endif
 
-    enum class Result { SUCCESS, FAILURE, ERROR, BAD_RETURN, NB_RESULT_TYPES };
+    enum class Result
+    {
+        SUCCESS,
+        FAILURE,
+        ERROR,
+        BAD_RETURN,
+        NB_RESULT_TYPES
+    };
 
     Result booleanToResult(bool value);
 
-    class TestError : public std::exception {
+    class TestError : public std::exception
+    {
         std::string message;
 
     public:
@@ -34,8 +45,10 @@ namespace test {
         const char *what() const noexcept override { return message.c_str(); }
     };
 
-    class Tests {
-        struct testStats {
+    class Tests
+    {
+        struct testStats
+        {
             size_t nbTests;
             size_t nbSuccesses;
             size_t nbFailures;
@@ -46,14 +59,16 @@ namespace test {
         const int NB_SPACES_BEFORE_CHRONO = 11;
         const int CHRONO_FLOAT_SIZE = 8;
 
-        typedef struct testResult {
+        typedef struct testResult
+        {
             std::string name;
             size_t number;
             Result result;
             double time;
         } Test;
 
-        typedef struct testBlock {
+        typedef struct testBlock
+        {
             std::string name;
             std::list<Test> results = std::list<Test>();
             std::list<testBlock> innerBlocks = std::list<testBlock>();
