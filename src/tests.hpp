@@ -18,11 +18,14 @@
 namespace test {
     constexpr size_t PIPE_BUFFER_SIZE = 255;
 
-#ifdef BASH_COLORS
-    // bash colors (not standard to all shells)
-    const std::string TEST_RESULT_RED = "\e[31m";
-    const std::string TEST_RESULT_GREEN = "\e[32m";
-    const std::string TEST_RESULT_END = "\e[0m";
+#ifdef BASH_COLORS // (not standard to all shells, so it is disabled by default)
+    const std::string TEST_RESULT_COLOR_FAILURE = "\e[31m";
+    const std::string TEST_RESULT_COLOR_SUCCESS = "\e[32m";
+    const std::string TEST_RESULT_COLOR_END = "\e[0m";
+    #else
+    const std::string TEST_RESULT_COLOR_FAILURE = "";
+    const std::string TEST_RESULT_COLOR_SUCCESS = "";
+    const std::string TEST_RESULT_COLOR_END = "";
 #endif
 
     enum class Result {
@@ -58,73 +61,53 @@ namespace test {
         typedef struct test {
             std::function<Result()> function;
             std::string name;
+            size_t number;
+            std::chrono::steady_clock::time_point startTime;
+            double time;
             pid_t pid;
             int pipe;
-            size_t number;
-            Result result;
-            double time;
+            Result result = Result::BAD_RETURN;
         } Test;
 
         typedef struct testBlock {
             std::string name;
+            testBlock *parentBlock = nullptr;
+            bool parallel = true;
             std::list<Test> tests = std::list<Test>();
             std::list<testBlock> innerBlocks = std::list<testBlock>();
             double time = .0;
-            testBlock *parentBlock;
-
-            testBlock(const std::string &name, testBlock *parentBlock = nullptr) : name{name}, parentBlock{parentBlock} {}
+            bool success = true;
         } TestBlock;
 
-        TestBlock *rootBlock = new TestBlock("");
-        TestBlock *currentBlock = rootBlock;
+        TestBlock rootBlock = TestBlock{""};
+        TestBlock *currentBlock = &rootBlock;
 
-        std::chrono::steady_clock::time_point startedSingleTestTimer;
         std::chrono::steady_clock::time_point startedGlobalTestsTimer;
         double totalTime = .0;
 
         std::string resultToStr(Result result) const;
 
-        std::string resultToStrColored(Result result) const;
-
         void displayBlocks() const;
         void displayTestWithChrono(const Test &test, int testsNbSize) const;
         void displayGlobalStats() const;
 
-        void displayBlocksSummary(const TestBlock *blockToDisplay, int tabs = 0) const;
-        void displayTabs(int tabs) const;
+        void displayBlocksSummary(const TestBlock &blockToDisplay, int tabs = 0) const;
 
         void displayTabsAndPipe(int tabs) const;
 
-        /**
-         * Starts a test.
-         * Must be called before each test.
-         *
-         */
-        void startTest(Test &test);
+        void updateStats(Test &test);
 
-        /**
-         * Ends a test.
-         * Must be called after each test.
-         */
-        void endTest(Test &test);
+        void afterTest(Test &test, int tmpChildStatus, std::chrono::steady_clock::time_point endTime);
 
-        Result parentCode(Test &test);
-
-        void runTestBlock(std::list<Test>::iterator tests, std::list<Test>::iterator end);
-        void run(TestBlock *block);
+        void runTestBlock(TestBlock &block);
+        void runTestBlockParallel(TestBlock &block);
+        void run(TestBlock &block);
 
     public:
-        ~Tests();
         void addTest(std::function<Result()> function, const std::string &testName = "");
 
-        /**
-         * If a test is running, raises a TestError.
-         */
-        void beginTestBlock(const std::string &name);
+        void beginTestBlock(const std::string &name, bool runTestsInParallel = true);
 
-        /**
-         * If a test is running or if there is no block to close, raises a TestError.
-         */
         void endTestBlock();
 
         void runTests();

@@ -18,53 +18,24 @@ namespace test {
         }
     }
 
-    std::string Tests::resultToStrColored(Result result) const {
-#ifdef BASH_COLORS
-        switch (result) {
-        case Result::SUCCESS:
-            return TEST_RESULT_GREEN + "SUCCESS" + TEST_RESULT_END;
-        case Result::FAILURE:
-            return TEST_RESULT_RED + "FAILURE" + TEST_RESULT_END;
-        case Result::ERROR:
-            return TEST_RESULT_RED + "ERROR" + TEST_RESULT_END;
-        case Result::BAD_RETURN:
-            return TEST_RESULT_RED + "BAD_RETURN" + TEST_RESULT_END;
-        default:
-            return TEST_RESULT_RED + "UNKNOWN" + TEST_RESULT_END;
-        }
-#else
-        switch (result) {
-        case Result::SUCCESS:
-            return "SUCCESS";
-        case Result::FAILURE:
-            return "FAILURE";
-        case Result::ERROR:
-            return "ERROR";
-        case Result::BAD_RETURN:
-            return "BAD_RETURN";
-        default:
-            return "UNKNOWN";
-        }
-#endif
-    }
-
     void Tests::displayBlocks() const {
         TestBlock *block = currentBlock;
-        int tabs = 0;
-        while (block != rootBlock) {
-            displayTabs(tabs);
+        while (block != &rootBlock) {
             std::cout << "in block '" << block->name << "'\n";
             block = block->parentBlock;
         }
     }
 
     void Tests::displayTestWithChrono(const Test &test, int testsNbSize) const {
-        std::string result = resultToStrColored(test.result);
+        std::string result = resultToStr(test.result);
         std::string testNumberString = std::to_string(test.number);
-        std::cout << "Test n°" << test.number << std::string(testsNbSize - testNumberString.size(), ' ') << ": " << result;
+        std::cout << "Test n°" << test.number << std::string(testsNbSize - testNumberString.size(), ' ') << ": ";
+        if (test.result == Result::SUCCESS) std::cout << TEST_RESULT_COLOR_SUCCESS;
+        else std::cout << TEST_RESULT_COLOR_FAILURE;
         std::cout
-            << std::string(NB_SPACES_BEFORE_CHRONO - resultToStr(test.result).size(), ' ')
-            << " "
+            << result
+            << TEST_RESULT_COLOR_END
+            << std::string(NB_SPACES_BEFORE_CHRONO - result.size(), ' ')
             << std::fixed
             << std::setprecision(CHRONO_FLOAT_SIZE)
             << test.time
@@ -81,26 +52,31 @@ namespace test {
         std::cout << "Bad returns: " << stats.nbBadReturns << "\n";
     }
 
-    void Tests::displayBlocksSummary(const TestBlock *blockToDisplay, int tabs) const {
-        std::cout << blockToDisplay->name << ": " << std::fixed << std::setprecision(CHRONO_FLOAT_SIZE) << blockToDisplay->time << "s\n";
+    void Tests::displayBlocksSummary(const TestBlock &block, int tabs) const {
+        std::cout << "group '" << block.name << "': ";
 
-        int testsNbSize = std::to_string(blockToDisplay->tests.size()).size(); // for a nice formatting
-        for (const Test &testToDisplay : blockToDisplay->tests) {
+        std::string resultString = resultToStr(block.success ? Result::SUCCESS : Result::FAILURE);
+
+        if (block.success) std::cout << TEST_RESULT_COLOR_SUCCESS;
+        else std::cout << TEST_RESULT_COLOR_FAILURE;
+        std::cout << resultString << TEST_RESULT_COLOR_END;
+
+        std::cout
+            << std::string(NB_SPACES_BEFORE_CHRONO - resultString.size(), ' ')
+            << std::fixed
+            << std::setprecision(CHRONO_FLOAT_SIZE)
+            << block.time
+            << "s\n";
+
+        int testsNbSize = std::to_string(block.tests.size()).size(); // for a nice formatting
+        for (const Test &testToDisplay : block.tests) {
             displayTabsAndPipe(tabs);
             displayTestWithChrono(testToDisplay, testsNbSize);
         }
-        for (const TestBlock &innerBlock : blockToDisplay->innerBlocks) {
+        for (const TestBlock &innerBlock : block.innerBlocks) {
             displayTabsAndPipe(tabs);
-            displayBlocksSummary(&innerBlock, tabs + 1);
+            displayBlocksSummary(innerBlock, tabs + 1);
         }
-
-        displayTabsAndPipe(tabs - 1);
-        std::cout << "(" << blockToDisplay->name << ")\n";
-    }
-
-    void Tests::displayTabs(int tabs) const {
-        for (int tab = 0; tab < tabs; tab++)
-            std::cout << '\t';
     }
 
     void Tests::displayTabsAndPipe(int tabs) const {
@@ -109,10 +85,7 @@ namespace test {
         if (tabs >= 0) std::cout << "| ";
     }
 
-    void Tests::startTest(Test &test) { startedSingleTestTimer = std::chrono::steady_clock::now(); }
-
-    void Tests::endTest(Test &test) {
-        test.time = std::chrono::duration<double>(std::chrono::steady_clock::now() - startedSingleTestTimer).count();
+    void Tests::updateStats(Test &test) {
         stats.nbTests++;
         switch (test.result) {
         case Result::SUCCESS:
@@ -132,109 +105,154 @@ namespace test {
         }
     }
 
-    Result Tests::parentCode(Test &test) {
-        int tmpChildStatus;
+    void Tests::afterTest(Test &test, int tmpChildStatus, std::chrono::steady_clock::time_point endTime) {
         int childStatus;
         char buffer[PIPE_BUFFER_SIZE];
-        Result result = Result::NB_RESULT_TYPES;
+        test.time = std::chrono::duration<double>(endTime - test.startTime).count();
 
-        pid_t error = waitpid(test.pid, &tmpChildStatus, 0);
-        endTest(test);
-
-        if (error == -1) {
-            perror((std::string("Error while waiting child '") + std::to_string(static_cast<int>(test.pid)) + "'").c_str());
-            exit(errno);
-        }
         if (WIFEXITED(tmpChildStatus)) {
             childStatus = WEXITSTATUS(tmpChildStatus);
-            if (childStatus < 0 || childStatus >= static_cast<int>(Result::BAD_RETURN)) {
-                std::cerr << "Child '" << test.pid << "'(" << test.name << ") exited with code '" << childStatus << "'\n";
-                result = Result::BAD_RETURN;
+            if (childStatus >= 0 && childStatus < static_cast<int>(Result::NB_RESULT_TYPES)) {
+                test.result = static_cast<Result>(childStatus);
+                updateStats(test);
+                return;
             }
+            else std::cerr << "Child '" << test.pid << "'(" << test.name << ") exited with code '" << childStatus << "'\n";
         }
         else if (WIFSIGNALED(tmpChildStatus)) {
             int signal = WTERMSIG(tmpChildStatus);
             std::cerr << "Child '" << test.pid << "'(" << test.name << ") terminated by signal '" << strsignal(signal) << "'\n";
-            result = Result::BAD_RETURN;
         }
         else std::cerr << "Test returned an invalid result.\n";
         if (WCOREDUMP((tmpChildStatus))) {
             std::cerr << "Child '" << test.pid << "'(" << test.name << ") produced a core dump\n";
-            result = Result::BAD_RETURN;
         }
-        if (result != Result::BAD_RETURN) result = static_cast<Result>(childStatus);
-        if (result != Result::SUCCESS) {
-            displayBlocks();
-            std::cout << "Test n°" << test.number << " (" << test.name << "): " << resultToStrColored(test.result) << "\n";
-            std::cout << "LOGS:\n";
-            bool reading = true;
-            while (reading) {
-                ssize_t readSize = read(test.pipe, buffer, PIPE_BUFFER_SIZE);
-                if (readSize == 0) reading = false;
-                else if (readSize == -1) {
-                    perror("Can't read from child's pipe");
-                    exit(errno);
-                }
-                else {
-                    buffer[readSize] = '\0';
-                    std::cout << buffer;
-                }
+        updateStats(test);
+        displayBlocks();
+        std::cout << "Test n°" << test.number << " (" << test.name << "): ";
+        if (test.result == Result::SUCCESS) std::cout << TEST_RESULT_COLOR_SUCCESS;
+        else std::cout << TEST_RESULT_COLOR_FAILURE;
+        std::cout << resultToStr(test.result) << TEST_RESULT_COLOR_END << "\n" << "LOGS:\n";
+        bool reading = true;
+        while (reading) {
+            ssize_t readSize = read(test.pipe, buffer, PIPE_BUFFER_SIZE);
+            if (readSize == 0) reading = false;
+            else if (readSize == -1) {
+                perror("Can't read from child's pipe");
+                exit(errno);
             }
-            std::cout << "\n";
+            else {
+                buffer[readSize] = '\0';
+                std::cout << buffer;
+            }
         }
-        return result;
+        std::cout << "\n";
     }
-
-    Tests::~Tests() { delete rootBlock; }
 
     void Tests::addTest(std::function<Result()> function, const std::string &testName) {
-        currentBlock->tests.push_back(Test{function, testName, 0, 0, currentBlock->tests.size(), Result::FAILURE, .0});
+        currentBlock->tests.push_back(Test{function, testName, currentBlock->tests.size()});
     }
 
-    void Tests::beginTestBlock(const std::string &name) {
-        currentBlock->innerBlocks.push_back(TestBlock(name, currentBlock));
+    void Tests::beginTestBlock(const std::string &name, bool runTestsInParallel) {
+        currentBlock->innerBlocks.push_back(TestBlock{name, currentBlock, runTestsInParallel});
         currentBlock = &currentBlock->innerBlocks.back();
     }
 
     void Tests::endTestBlock() {
-        if (currentBlock == rootBlock) throw TestError("There is no block to close.");
+        if (currentBlock == &rootBlock) throw TestError("There is no block to close.");
         currentBlock = currentBlock->parentBlock;
     }
 
-    void Tests::runTestBlock(std::list<Test>::iterator tests, std::list<Test>::iterator end) {
-        if (tests == end) return;
-        int _pipe[2];
+    void Tests::runTestBlock(TestBlock &block) {
+        for (Test &test : block.tests) {
+            int _pipe[2];
 
-        if (pipe(_pipe) == -1) {
-            perror("Can't create pipes");
-            exit(errno);
-        }
-        startTest(*tests);
-        pid_t childPid = fork();
-        switch (childPid) {
-        case -1:
-            perror("Can't fork test\n");
-            exit(errno);
-        case 0:
-            close(_pipe[0]);
-            dup2(_pipe[1], STDOUT_FILENO);
-            dup2(_pipe[1], STDERR_FILENO);
-            exit(static_cast<int>(tests->function()));
-        default:
-            close(_pipe[1]);
-            tests->pid = childPid;
-            tests->pipe = _pipe[0];
-            // runTestBlock(std::next(tests), end);
-            // tests->result = parentCode(*tests);
-            break;
+            if (pipe(_pipe) == -1) {
+                perror("Can't create pipes");
+                exit(errno);
+            }
+            test.startTime = std::chrono::steady_clock::now();
+            pid_t childPid = fork();
+            switch (childPid) {
+            case -1:
+                perror("Can't fork test\n");
+                exit(errno);
+            case 0:
+                close(_pipe[0]);
+                dup2(_pipe[1], STDOUT_FILENO);
+                dup2(_pipe[1], STDERR_FILENO);
+                exit(static_cast<int>(test.function()));
+            default:
+                close(_pipe[1]);
+                test.pid = childPid;
+                test.pipe = _pipe[0];
+                int tmpChildStatus;
+                pid_t pid = wait(&tmpChildStatus);
+                std::chrono::steady_clock::time_point endTime = std::chrono::steady_clock::now();
+                if (pid == -1) {
+                    perror("Error while waiting childs ");
+                    exit(errno);
+                }
+
+                afterTest(test, tmpChildStatus, endTime);
+                break;
+            }
         }
     }
 
-    void Tests::run(TestBlock *block) {
-        runTestBlock(block->tests.begin(), block->tests.end());
-        for (TestBlock &innerBlock : block->innerBlocks) {
+    void Tests::runTestBlockParallel(TestBlock &block) {
+        for (Test &test : block.tests) {
+            int _pipe[2];
+
+            if (pipe(_pipe) == -1) {
+                perror("Can't create pipes");
+                exit(errno);
+            }
+            test.startTime = std::chrono::steady_clock::now();
+            pid_t childPid = fork();
+            switch (childPid) {
+            case -1:
+                perror("Can't fork test\n");
+                exit(errno);
+            case 0:
+                close(_pipe[0]);
+                dup2(_pipe[1], STDOUT_FILENO);
+                dup2(_pipe[1], STDERR_FILENO);
+                exit(static_cast<int>(test.function()));
+            default:
+                close(_pipe[1]);
+                test.pid = childPid;
+                test.pipe = _pipe[0];
+                break;
+            }
+        }
+
+        for (size_t i = 0; i < block.tests.size(); i++) {
+            int tmpChildStatus;
+            pid_t pid = wait(&tmpChildStatus);
+            std::chrono::steady_clock::time_point endTime = std::chrono::steady_clock::now();
+            if (pid == -1) {
+                perror("Error while waiting childs ");
+                exit(errno);
+            }
+
+            for (Test &test : block.tests) {
+                if (test.pid != pid) continue;
+                afterTest(test, tmpChildStatus, endTime);
+                break;
+            }
+        }
+    }
+
+    void Tests::run(TestBlock &block) {
+        size_t nbFailures = stats.nbFailures;
+        if (block.parallel) runTestBlockParallel(block);
+        else runTestBlock(block);
+        if (stats.nbFailures > nbFailures) block.success = false;
+
+        for (TestBlock &innerBlock : block.innerBlocks) {
             std::chrono::steady_clock::time_point startedTimer = std::chrono::steady_clock::now();
-            run(&innerBlock);
+            run(innerBlock);
             innerBlock.time = std::chrono::duration<double>(std::chrono::steady_clock::now() - startedTimer).count();
         }
     }
@@ -247,8 +265,8 @@ namespace test {
 
     void Tests::displaySummary() {
         std::cout << "Summary:\n";
-        for (const TestBlock &innerBlock : rootBlock->innerBlocks) {
-            displayBlocksSummary(&innerBlock, 0);
+        for (const TestBlock &innerBlock : rootBlock.innerBlocks) {
+            displayBlocksSummary(innerBlock, 0);
         }
         displayGlobalStats();
     }
