@@ -4,6 +4,7 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <iomanip>
 #include <iostream>
 #include <list>
@@ -14,8 +15,7 @@
 
 #define DEBUG
 
-namespace test
-{
+namespace test {
     constexpr size_t PIPE_BUFFER_SIZE = 255;
 
 #ifdef BASH_COLORS
@@ -25,19 +25,17 @@ namespace test
     const std::string TEST_RESULT_END = "\e[0m";
 #endif
 
-    enum class Result
-    {
+    enum class Result {
         SUCCESS,
         FAILURE,
         ERROR,
         BAD_RETURN,
-        NB_RESULT_TYPES
+        NB_RESULT_TYPES // used to know the size of the enum
     };
 
     Result booleanToResult(bool value);
 
-    class TestError : public std::exception
-    {
+    class TestError : public std::exception {
         std::string message;
 
     public:
@@ -45,10 +43,8 @@ namespace test
         const char *what() const noexcept override { return message.c_str(); }
     };
 
-    class Tests
-    {
-        struct testStats
-        {
+    class Tests {
+        struct testStats {
             size_t nbTests;
             size_t nbSuccesses;
             size_t nbFailures;
@@ -59,34 +55,30 @@ namespace test
         const int NB_SPACES_BEFORE_CHRONO = 11;
         const int CHRONO_FLOAT_SIZE = 8;
 
-        typedef struct testResult
-        {
+        typedef struct test {
+            std::function<Result()> function;
             std::string name;
+            pid_t pid;
+            int pipe;
             size_t number;
             Result result;
             double time;
         } Test;
 
-        typedef struct testBlock
-        {
+        typedef struct testBlock {
             std::string name;
-            std::list<Test> results = std::list<Test>();
+            std::list<Test> tests = std::list<Test>();
             std::list<testBlock> innerBlocks = std::list<testBlock>();
             double time = .0;
             testBlock *parentBlock;
-            std::chrono::steady_clock::time_point startedTimer;
 
-            testBlock(const std::string &name, testBlock *parentBlock = nullptr)
-                : name{name}, parentBlock{parentBlock}, startedTimer{std::chrono::steady_clock::now()} {}
+            testBlock(const std::string &name, testBlock *parentBlock = nullptr) : name{name}, parentBlock{parentBlock} {}
         } TestBlock;
 
         TestBlock *rootBlock = new TestBlock("");
         TestBlock *currentBlock = rootBlock;
 
-        bool testsStarted = false;
-        bool testRunning = false;
         std::chrono::steady_clock::time_point startedSingleTestTimer;
-
         std::chrono::steady_clock::time_point startedGlobalTestsTimer;
         double totalTime = .0;
 
@@ -95,7 +87,6 @@ namespace test
         std::string resultToStrColored(Result result) const;
 
         void displayBlocks() const;
-        void displayTest(const Test &test) const;
         void displayTestWithChrono(const Test &test, int testsNbSize) const;
         void displayGlobalStats() const;
 
@@ -109,20 +100,22 @@ namespace test
          * Must be called before each test.
          *
          */
-        void startTest(const std::string &name = "");
+        void startTest(Test &test);
 
         /**
          * Ends a test.
          * Must be called after each test.
          */
-        void endTest(Result result);
+        void endTest(Test &test);
 
-        void parentCode(int _pipe, pid_t childPid, const std::string &testName);
+        Result parentCode(Test &test);
+
+        void runTestBlock(std::list<Test>::iterator tests, std::list<Test>::iterator end);
+        void run(TestBlock *block);
 
     public:
         ~Tests();
-        void start();
-        void stop();
+        void addTest(std::function<Result()> function, const std::string &testName = "");
 
         /**
          * If a test is running, raises a TestError.
@@ -134,7 +127,8 @@ namespace test
          */
         void endTestBlock();
 
-        void runTest(Result (*f)(void), const std::string &testName = "");
+        void runTests();
+
         void displaySummary();
 
         bool allTestsPassed();
