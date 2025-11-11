@@ -114,8 +114,6 @@ namespace test {
             childStatus = WEXITSTATUS(tmpChildStatus);
             if (childStatus >= 0 && childStatus < static_cast<int>(Result::NB_RESULT_TYPES)) {
                 test.result = static_cast<Result>(childStatus);
-                updateStats(test);
-                return;
             }
             else std::cerr << "Child '" << test.pid << "'(" << test.name << ") exited with code '" << childStatus << "'\n";
         }
@@ -128,25 +126,27 @@ namespace test {
             std::cerr << "Child '" << test.pid << "'(" << test.name << ") produced a core dump\n";
         }
         updateStats(test);
-        displayBlocks();
-        std::cout << "Test n°" << test.number << " (" << test.name << "): ";
-        if (test.result == Result::SUCCESS) std::cout << TEST_RESULT_COLOR_SUCCESS;
-        else std::cout << TEST_RESULT_COLOR_FAILURE;
-        std::cout << resultToStr(test.result) << TEST_RESULT_COLOR_END << "\n" << "LOGS:\n";
-        bool reading = true;
-        while (reading) {
-            ssize_t readSize = read(test.pipe, buffer, PIPE_BUFFER_SIZE);
-            if (readSize == 0) reading = false;
-            else if (readSize == -1) {
-                perror("Can't read from child's pipe");
-                exit(errno);
+        if (test.result != Result::SUCCESS) {
+            displayBlocks();
+            std::cout << "Test n°" << test.number << " (" << test.name << "): ";
+            if (test.result == Result::SUCCESS) std::cout << TEST_RESULT_COLOR_SUCCESS;
+            else std::cout << TEST_RESULT_COLOR_FAILURE;
+            std::cout << resultToStr(test.result) << TEST_RESULT_COLOR_END << "\n" << "LOGS:\n";
+            bool reading = true;
+            while (reading) {
+                ssize_t readSize = read(test.pipe, buffer, PIPE_BUFFER_SIZE);
+                if (readSize == 0) reading = false;
+                else if (readSize == -1) {
+                    perror("Can't read from child's pipe");
+                    exit(errno);
+                }
+                else {
+                    buffer[readSize] = '\0';
+                    std::cout << buffer;
+                }
             }
-            else {
-                buffer[readSize] = '\0';
-                std::cout << buffer;
-            }
+            std::cout << "\n";
         }
-        std::cout << "\n";
     }
 
     void Tests::addTest(std::function<Result()> function, const std::string &testName) {
