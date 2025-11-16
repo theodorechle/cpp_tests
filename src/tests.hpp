@@ -13,8 +13,6 @@
 #include <sys/stat.h>
 #include <wait.h>
 
-#define DEBUG
-
 namespace test {
     constexpr size_t PIPE_BUFFER_SIZE = 255;
 
@@ -22,7 +20,7 @@ namespace test {
     const std::string TEST_RESULT_COLOR_FAILURE = "\e[31m";
     const std::string TEST_RESULT_COLOR_SUCCESS = "\e[32m";
     const std::string TEST_RESULT_COLOR_END = "\e[0m";
-    #else
+#else
     const std::string TEST_RESULT_COLOR_FAILURE = "";
     const std::string TEST_RESULT_COLOR_SUCCESS = "";
     const std::string TEST_RESULT_COLOR_END = "";
