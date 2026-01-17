@@ -45,7 +45,7 @@ namespace test {
     };
 
     class Tests {
-        struct testStats {
+        struct TestStats {
             size_t nbTests;
             size_t nbSuccesses;
             size_t nbFailures;
@@ -56,7 +56,7 @@ namespace test {
         const int NB_SPACES_BEFORE_CHRONO = 11;
         const int CHRONO_FLOAT_SIZE = 8;
 
-        typedef struct test {
+        struct Test {
             std::function<Result()> function;
             std::string name;
             size_t number;
@@ -65,19 +65,19 @@ namespace test {
             pid_t pid;
             int pipe;
             Result result = Result::BAD_RETURN;
-        } Test;
+        };
 
-        typedef struct testBlock {
+        struct TestBlock {
             std::string name;
-            testBlock *parentBlock = nullptr;
+            TestBlock *parentBlock = nullptr;
             bool parallel = true;
             std::list<Test> tests = std::list<Test>();
-            std::list<testBlock> innerBlocks = std::list<testBlock>();
+            std::list<TestBlock> innerBlocks = std::list<TestBlock>();
             double time = .0;
             bool success = true;
-        } TestBlock;
+        };
 
-        TestBlock rootBlock = TestBlock{""};
+        TestBlock rootBlock = TestBlock{"", nullptr, false};
         TestBlock *currentBlock = &rootBlock;
 
         std::chrono::steady_clock::time_point startedGlobalTestsTimer;
