@@ -175,7 +175,7 @@ namespace test {
             pid_t childPid = fork();
             switch (childPid) {
             case -1:
-                perror("Can't fork test\n");
+                perror("Can't fork test");
                 exit(errno);
             case 0:
                 close(_pipe[0]);
@@ -190,7 +190,7 @@ namespace test {
                 pid_t pid = wait(&tmpChildStatus);
                 std::chrono::steady_clock::time_point endTime = std::chrono::steady_clock::now();
                 if (pid == -1) {
-                    perror("Error while waiting childs ");
+                    perror("Error while waiting childs");
                     exit(errno);
                 }
 
@@ -212,7 +212,7 @@ namespace test {
             pid_t childPid = fork();
             switch (childPid) {
             case -1:
-                perror("Can't fork test\n");
+                perror("Can't fork test");
                 exit(errno);
             case 0:
                 close(_pipe[0]);
@@ -232,7 +232,7 @@ namespace test {
             pid_t pid = wait(&tmpChildStatus);
             std::chrono::steady_clock::time_point endTime = std::chrono::steady_clock::now();
             if (pid == -1) {
-                perror("Error while waiting childs ");
+                perror("Error while waiting childs");
                 exit(errno);
             }
 
