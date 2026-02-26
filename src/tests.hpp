@@ -8,6 +8,7 @@
 #include <iomanip>
 #include <iostream>
 #include <list>
+#include <mutex>
 #include <sstream>
 #include <string.h>
 #include <sys/stat.h>
@@ -77,11 +78,11 @@ namespace test {
             bool success = true;
         };
 
-        TestBlock rootBlock = TestBlock{"", nullptr, false};
-        TestBlock *currentBlock = &rootBlock;
+        TestBlock _rootBlock = TestBlock{"", nullptr, false};
+        TestBlock *_currentBlock = &_rootBlock;
 
-        std::chrono::steady_clock::time_point startedGlobalTestsTimer;
-        double totalTime = .0;
+        std::chrono::steady_clock::time_point _startedGlobalTestsTimer;
+        double _totalTime = .0;
 
         std::string resultToStr(Result result) const;
 
