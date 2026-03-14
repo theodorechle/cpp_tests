@@ -1,5 +1,5 @@
 CPP_C=g++
-CPP_FLAGS=-std=c++17 -Wall -g -MMD -MP
+CPP_FLAGS=-std=c++23 -Wall -g -MMD -MP
 BIN_DIR=bin
 OBJ_DIR=obj
 SRC_DIR=src

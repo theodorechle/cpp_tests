@@ -19,8 +19,8 @@ namespace test {
     }
 
     void Tests::displayBlocks() const {
-        TestBlock *block = currentBlock;
-        while (block != &rootBlock) {
+        TestBlock *block = _currentBlock;
+        while (block != &_rootBlock) {
             std::cout << "in block '" << block->name << "'\n";
             block = block->parentBlock;
         }
@@ -45,7 +45,7 @@ namespace test {
 
     void Tests::displayGlobalStats() const {
         std::cout << "Global stats:\n";
-        std::cout << stats.nbTests << " tests in " << std::fixed << std::setprecision(CHRONO_FLOAT_SIZE) << totalTime << "s\n";
+        std::cout << stats.nbTests << " tests in " << std::fixed << std::setprecision(CHRONO_FLOAT_SIZE) << _totalTime << "s\n";
         std::cout << "Successes: " << stats.nbSuccesses << "\n";
         std::cout << "Failures: " << stats.nbFailures << "\n";
         std::cout << "Errors: " << stats.nbErrors << "\n";
@@ -150,17 +150,17 @@ namespace test {
     }
 
     void Tests::addTest(std::function<Result()> function, const std::string &testName) {
-        currentBlock->tests.push_back(Test{function, testName, currentBlock->tests.size()});
+        _currentBlock->tests.push_back(Test{function, testName, _currentBlock->tests.size()});
     }
 
     void Tests::beginTestBlock(const std::string &name, bool runTestsInParallel) {
-        currentBlock->innerBlocks.push_back(TestBlock{name, currentBlock, runTestsInParallel});
-        currentBlock = &currentBlock->innerBlocks.back();
+        _currentBlock->innerBlocks.push_back(TestBlock{name, _currentBlock, runTestsInParallel});
+        _currentBlock = &_currentBlock->innerBlocks.back();
     }
 
     void Tests::endTestBlock() {
-        if (currentBlock == &rootBlock) throw TestError("There is no block to close.");
-        currentBlock = currentBlock->parentBlock;
+        if (_currentBlock == &_rootBlock) throw TestError("There is no block to close.");
+        _currentBlock = _currentBlock->parentBlock;
     }
 
     void Tests::runTestBlock(TestBlock &block) {
@@ -258,14 +258,14 @@ namespace test {
     }
 
     void Tests::runTests() {
-        startedGlobalTestsTimer = std::chrono::steady_clock::now();
-        run(rootBlock);
-        totalTime = std::chrono::duration<double>(std::chrono::steady_clock::now() - startedGlobalTestsTimer).count();
+        _startedGlobalTestsTimer = std::chrono::steady_clock::now();
+        run(_rootBlock);
+        _totalTime = std::chrono::duration<double>(std::chrono::steady_clock::now() - _startedGlobalTestsTimer).count();
     }
 
     void Tests::displaySummary() {
         std::cout << "Summary:\n";
-        for (const TestBlock &innerBlock : rootBlock.innerBlocks) {
+        for (const TestBlock &innerBlock : _rootBlock.innerBlocks) {
             displayBlocksSummary(innerBlock, 0);
         }
         displayGlobalStats();
