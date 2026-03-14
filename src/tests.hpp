@@ -17,16 +17,6 @@
 namespace test {
     constexpr size_t PIPE_BUFFER_SIZE = 255;
 
-#ifdef BASH_COLORS // (not standard to all shells, so it is disabled by default)
-    const std::string TEST_RESULT_COLOR_FAILURE = "\e[31m";
-    const std::string TEST_RESULT_COLOR_SUCCESS = "\e[32m";
-    const std::string TEST_RESULT_COLOR_END = "\e[0m";
-#else
-    const std::string TEST_RESULT_COLOR_FAILURE = "";
-    const std::string TEST_RESULT_COLOR_SUCCESS = "";
-    const std::string TEST_RESULT_COLOR_END = "";
-#endif
-
     enum class Result {
         SUCCESS,
         FAILURE,
@@ -34,6 +24,8 @@ namespace test {
         BAD_RETURN,
         NB_RESULT_TYPES // used to know the size of the enum
     };
+
+    bool terminalColorsAvailable();
 
     Result booleanToResult(bool value);
 
@@ -46,8 +38,9 @@ namespace test {
     };
 
     class Tests {
-        struct TestStats {
+        struct {
             size_t nbTests;
+            size_t nbTestsRunned;
             size_t nbSuccesses;
             size_t nbFailures;
             size_t nbErrors;
@@ -56,6 +49,10 @@ namespace test {
 
         const int NB_SPACES_BEFORE_CHRONO = 11;
         const int CHRONO_FLOAT_SIZE = 8;
+
+        const std::string TEST_RESULT_COLOR_FAILURE = "\e[31m";
+        const std::string TEST_RESULT_COLOR_SUCCESS = "\e[32m";
+        const std::string TEST_RESULT_COLOR_END = "\e[0m";
 
         struct Test {
             std::function<Result()> function;
@@ -93,6 +90,8 @@ namespace test {
         void displayBlocksSummary(const TestBlock &blockToDisplay, int tabs = 0) const;
 
         void displayTabsAndPipe(int tabs) const;
+
+        void displayNbTestsRunned(bool erasePreviousLine);
 
         void updateStats(Test &test);
 

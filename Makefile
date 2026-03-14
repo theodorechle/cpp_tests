@@ -13,10 +13,6 @@ OBJ_TESTS=$(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR)/%.o, $(SRC_TESTS))
 
 .PHONY: lib clean
 
-ifeq ($(BASH_COLORS),1)
-CPP_FLAGS += -DBASH_COLORS
-endif
-
 # Build the final executable combining exe and style
 lib: $(LIB).a
 
