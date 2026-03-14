@@ -45,7 +45,7 @@ namespace test {
 
     void Tests::displayGlobalStats() const {
         std::cout << "Global stats:\n";
-        std::cout << stats.nbTests << " tests in " << std::fixed << std::setprecision(CHRONO_FLOAT_SIZE) << _totalTime << "s\n";
+        std::cout << stats.nbTestsRunned << " tests in " << std::fixed << std::setprecision(CHRONO_FLOAT_SIZE) << _totalTime << "s\n";
         std::cout << "Successes: " << stats.nbSuccesses << "\n";
         std::cout << "Failures: " << stats.nbFailures << "\n";
         std::cout << "Errors: " << stats.nbErrors << "\n";
@@ -85,8 +85,21 @@ namespace test {
         if (tabs >= 0) std::cout << "| ";
     }
 
+    void Tests::displayNbTestsRunned(bool erasePreviousLine) {
+        if (erasePreviousLine) std::cerr << "\033[A";
+        std::cerr
+            << "tests runned: "
+            << stats.nbTestsRunned
+            << "/"
+            << stats.nbTests
+            << " ("
+            << stats.nbTestsRunned * 100 / stats.nbTests
+            << "%)"
+            << std::endl;
+    }
+
     void Tests::updateStats(Test &test) {
-        stats.nbTests++;
+        stats.nbTestsRunned++;
         switch (test.result) {
         case Result::SUCCESS:
             stats.nbSuccesses++;
@@ -126,6 +139,8 @@ namespace test {
             std::cerr << "Child '" << test.pid << "'(" << test.name << ") produced a core dump\n";
         }
         updateStats(test);
+        displayNbTestsRunned(true);
+
         if (test.result != Result::SUCCESS) {
             displayBlocks();
             std::cout << "Test n°" << test.number << " (" << test.name << "): ";
@@ -151,6 +166,7 @@ namespace test {
 
     void Tests::addTest(std::function<Result()> function, const std::string &testName) {
         _currentBlock->tests.push_back(Test{function, testName, _currentBlock->tests.size()});
+        stats.nbTests++;
     }
 
     void Tests::beginTestBlock(const std::string &name, bool runTestsInParallel) {
@@ -175,7 +191,7 @@ namespace test {
             pid_t childPid = fork();
             switch (childPid) {
             case -1:
-                perror("Can't fork test\n");
+                perror("Can't fork test");
                 exit(errno);
             case 0:
                 close(_pipe[0]);
@@ -190,7 +206,7 @@ namespace test {
                 pid_t pid = wait(&tmpChildStatus);
                 std::chrono::steady_clock::time_point endTime = std::chrono::steady_clock::now();
                 if (pid == -1) {
-                    perror("Error while waiting childs ");
+                    perror("Error while waiting childs");
                     exit(errno);
                 }
 
@@ -212,7 +228,7 @@ namespace test {
             pid_t childPid = fork();
             switch (childPid) {
             case -1:
-                perror("Can't fork test\n");
+                perror("Can't fork test");
                 exit(errno);
             case 0:
                 close(_pipe[0]);
@@ -232,7 +248,7 @@ namespace test {
             pid_t pid = wait(&tmpChildStatus);
             std::chrono::steady_clock::time_point endTime = std::chrono::steady_clock::now();
             if (pid == -1) {
-                perror("Error while waiting childs ");
+                perror("Error while waiting childs");
                 exit(errno);
             }
 
@@ -259,6 +275,7 @@ namespace test {
 
     void Tests::runTests() {
         _startedGlobalTestsTimer = std::chrono::steady_clock::now();
+        displayNbTestsRunned(false);
         run(_rootBlock);
         _totalTime = std::chrono::duration<double>(std::chrono::steady_clock::now() - _startedGlobalTestsTimer).count();
     }
