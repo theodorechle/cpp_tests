@@ -25,8 +25,6 @@ namespace test {
         NB_RESULT_TYPES // used to know the size of the enum
     };
 
-    bool terminalColorsAvailable();
-
     Result booleanToResult(bool value);
 
     class TestError : public std::exception {
