@@ -13,7 +13,6 @@ OBJ_TESTS=$(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR)/%.o, $(SRC_TESTS))
 
 .PHONY: lib clean
 
-# Build the final executable combining exe and style
 lib: $(LIB).a
 
 $(LIB).a: $(OBJ_TESTS)
