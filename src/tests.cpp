@@ -87,8 +87,8 @@ namespace test {
 
     void Tests::displayNbTestsRunned(bool erasePreviousLine) {
         if (erasePreviousLine) std::cerr << "\033[A";
-        std::cerr
-            << "tests runned: "
+        std::cerr << LOADING_CHARS[stats.nbTestsRunned % NB_LOADING_CHARS]
+            << " tests runned: "
             << stats.nbTestsRunned
             << "/"
             << stats.nbTests

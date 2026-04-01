@@ -17,6 +17,9 @@
 namespace test {
     constexpr size_t PIPE_BUFFER_SIZE = 255;
 
+    constexpr int NB_LOADING_CHARS = 8;
+    const std::string LOADING_CHARS[NB_LOADING_CHARS] = {"⣷", "⣯", "⣟", "⡿", "⢿", "⣻", "⣽", "⣾"};
+
     enum class Result {
         SUCCESS,
         FAILURE,
