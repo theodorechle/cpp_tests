@@ -94,7 +94,7 @@ namespace test {
 
         void displayTabsAndPipe(int tabs) const;
 
-        void displayNbTestsRunned(bool erasePreviousLine);
+        void displayNbTestsRunned(bool erasePreviousLine, size_t nbTestsRunned, size_t nbTests);
 
         void updateStats(Test &test);
 

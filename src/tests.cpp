@@ -85,11 +85,11 @@ namespace test {
         if (tabs >= 0) std::cout << "| ";
     }
 
-    void Tests::displayNbTestsRunned(bool erasePreviousLine) {
+    void Tests::displayNbTestsRunned(bool erasePreviousLine, size_t nbTestsRunned, size_t nbTests) {
         if (erasePreviousLine) std::cerr << "\033[A";
-        std::cerr << LOADING_CHARS[stats.nbTestsRunned % NB_LOADING_CHARS] << " tests runned: " << stats.nbTestsRunned << "/" << stats.nbTests;
+        std::cerr << LOADING_CHARS[nbTestsRunned % NB_LOADING_CHARS] << " tests runned: " << nbTestsRunned << "/" << nbTests;
         if (stats.nbTests > 0) {
-            std::cout << " (" << stats.nbTestsRunned * 100 / stats.nbTests << "%)";
+            std::cout << " (" << nbTestsRunned * 100 / nbTests << "%)";
         }
         std::cout << std::endl;
     }
@@ -119,6 +119,8 @@ namespace test {
         char buffer[PIPE_BUFFER_SIZE];
         test.time = std::chrono::duration<double>(endTime - test.startTime).count();
 
+        displayNbTestsRunned(lastTestWasSuccessful, stats.nbTestsRunned + 1, stats.nbTests);
+
         if (WIFEXITED(tmpChildStatus)) {
             childStatus = WEXITSTATUS(tmpChildStatus);
             if (childStatus >= 0 && childStatus < static_cast<int>(Result::NB_RESULT_TYPES)) {
@@ -135,7 +137,6 @@ namespace test {
             std::cerr << "Child '" << test.pid << "'(" << test.name << ") produced a core dump\n";
         }
         updateStats(test);
-        displayNbTestsRunned(lastTestWasSuccessful);
 
         lastTestWasSuccessful = test.result == Result::SUCCESS;
 
@@ -273,7 +274,7 @@ namespace test {
 
     void Tests::runTests() {
         _startedGlobalTestsTimer = std::chrono::steady_clock::now();
-        displayNbTestsRunned(false);
+        displayNbTestsRunned(false, stats.nbTestsRunned, stats.nbTests);
         run(_rootBlock);
         _totalTime = std::chrono::duration<double>(std::chrono::steady_clock::now() - _startedGlobalTestsTimer).count();
     }
