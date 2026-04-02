@@ -28,6 +28,8 @@ namespace test {
         NB_RESULT_TYPES // used to know the size of the enum
     };
 
+    std::string resultToStr(Result result);
+
     Result booleanToResult(bool value);
 
     class TestError : public std::exception {
@@ -83,8 +85,6 @@ namespace test {
         double _totalTime = .0;
 
         bool lastTestWasSuccessful = true;
-
-        std::string resultToStr(Result result) const;
 
         void displayBlocks() const;
         void displayTestWithChrono(const Test &test, int testsNbSize) const;

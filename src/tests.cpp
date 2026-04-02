@@ -3,7 +3,7 @@
 namespace test {
     Result booleanToResult(bool value) { return value ? Result::SUCCESS : Result::FAILURE; }
 
-    std::string Tests::resultToStr(Result result) const {
+    std::string resultToStr(Result result) {
         switch (result) {
         case Result::SUCCESS:
             return "SUCCESS";
