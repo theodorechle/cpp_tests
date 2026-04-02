@@ -82,6 +82,8 @@ namespace test {
         std::chrono::steady_clock::time_point _startedGlobalTestsTimer;
         double _totalTime = .0;
 
+        bool lastTestWasSuccessful = true;
+
         std::string resultToStr(Result result) const;
 
         void displayBlocks() const;

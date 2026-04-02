@@ -135,9 +135,11 @@ namespace test {
             std::cerr << "Child '" << test.pid << "'(" << test.name << ") produced a core dump\n";
         }
         updateStats(test);
-        displayNbTestsRunned(true);
+        displayNbTestsRunned(lastTestWasSuccessful);
 
-        if (test.result != Result::SUCCESS) {
+        lastTestWasSuccessful = test.result == Result::SUCCESS;
+
+        if (!lastTestWasSuccessful) {
             displayBlocks();
             std::cout << "Test n°" << test.number << " (" << test.name << "): ";
             if (test.result == Result::SUCCESS) std::cout << TEST_RESULT_COLOR_SUCCESS;
