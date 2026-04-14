@@ -86,8 +86,8 @@ namespace test {
     }
 
     void Tests::displayNbTestsRunned(bool erasePreviousLine, size_t nbTestsRunned, size_t nbTests) {
-        if (erasePreviousLine) std::cerr << "\033[A";
-        std::cerr << LOADING_CHARS[nbTestsRunned % NB_LOADING_CHARS] << " tests runned: " << nbTestsRunned << "/" << nbTests;
+        if (erasePreviousLine) std::cout << "\033[A";
+        std::cout << LOADING_CHARS[nbTestsRunned % NB_LOADING_CHARS] << " tests runned: " << nbTestsRunned << "/" << nbTests;
         if (stats.nbTests > 0) {
             std::cout << " (" << nbTestsRunned * 100 / nbTests << "%)";
         }
