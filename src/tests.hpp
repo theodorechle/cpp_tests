@@ -48,7 +48,7 @@ namespace test {
             size_t nbFailures;
             size_t nbErrors;
             size_t nbBadReturns;
-        } stats = {0, 0, 0, 0, 0};
+        } stats = {0, 0, 0, 0, 0, 0};
 
         const int NB_SPACES_BEFORE_CHRONO = 11;
         const int CHRONO_FLOAT_SIZE = 8;

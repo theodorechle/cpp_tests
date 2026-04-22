@@ -68,7 +68,7 @@ namespace test {
             << block.time
             << "s\n";
 
-        int testsNbSize = std::to_string(block.tests.size()).size(); // for a nice formatting
+        int testsNbSize = std::to_string(stats.nbTests).size(); // for a nice formatting
         for (const Test &testToDisplay : block.tests) {
             displayTabsAndPipe(tabs);
             displayTestWithChrono(testToDisplay, testsNbSize);
@@ -164,8 +164,8 @@ namespace test {
     }
 
     void Tests::addTest(std::function<Result()> function, const std::string &testName) {
-        _currentBlock->tests.push_back(Test{function, testName, _currentBlock->tests.size()});
         stats.nbTests++;
+        _currentBlock->tests.push_back(Test{function, testName, stats.nbTests});
     }
 
     void Tests::beginTestBlock(const std::string &name, bool runTestsInParallel) {
