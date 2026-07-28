@@ -114,7 +114,7 @@ namespace test {
         }
     }
 
-    void Tests::afterTest(Test &test, int tmpChildStatus, std::chrono::steady_clock::time_point endTime) {
+    bool Tests::afterTest(Test &test, int tmpChildStatus, std::chrono::steady_clock::time_point endTime) {
         int childStatus;
         char buffer[PIPE_BUFFER_SIZE];
         test.time = std::chrono::duration<double>(endTime - test.startTime).count();
@@ -161,6 +161,7 @@ namespace test {
             }
             std::cout << "\n";
         }
+        return test.result == Result::SUCCESS;
     }
 
     void Tests::addTest(std::function<Result()> function, const std::string &testName) {
@@ -178,7 +179,8 @@ namespace test {
         _currentBlock = _currentBlock->parentBlock;
     }
 
-    void Tests::runTestBlock(TestBlock &block) {
+    bool Tests::runTestBlock(TestBlock &block) {
+        bool success = true;
         for (Test &test : block.tests) {
             int _pipe[2];
 
@@ -209,13 +211,15 @@ namespace test {
                     exit(errno);
                 }
 
-                afterTest(test, tmpChildStatus, endTime);
+                success = afterTest(test, tmpChildStatus, endTime) && success;
                 break;
             }
         }
+        return success;
     }
 
-    void Tests::runTestBlockParallel(TestBlock &block) {
+    bool Tests::runTestBlockParallel(TestBlock &block) {
+        bool success = true;
         for (Test &test : block.tests) {
             int _pipe[2];
 
@@ -253,17 +257,15 @@ namespace test {
 
             for (Test &test : block.tests) {
                 if (test.pid != pid) continue;
-                afterTest(test, tmpChildStatus, endTime);
+                success = afterTest(test, tmpChildStatus, endTime) && success;
                 break;
             }
         }
+        return success;
     }
 
     void Tests::run(TestBlock &block) {
-        size_t nbFailures = stats.nbFailures;
-        if (block.parallel) runTestBlockParallel(block);
-        else runTestBlock(block);
-        if (stats.nbFailures > nbFailures) block.success = false;
+        block.success = block.parallel ? runTestBlockParallel(block) : runTestBlock(block);
 
         for (TestBlock &innerBlock : block.innerBlocks) {
             std::chrono::steady_clock::time_point startedTimer = std::chrono::steady_clock::now();

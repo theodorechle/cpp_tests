@@ -98,10 +98,13 @@ namespace test {
 
         void updateStats(Test &test);
 
-        void afterTest(Test &test, int tmpChildStatus, std::chrono::steady_clock::time_point endTime);
+        // return true if test succeeded
+        bool afterTest(Test &test, int tmpChildStatus, std::chrono::steady_clock::time_point endTime);
 
-        void runTestBlock(TestBlock &block);
-        void runTestBlockParallel(TestBlock &block);
+        // return true if all tests succeeded
+        bool runTestBlock(TestBlock &block);
+        // return true if all tests succeeded
+        bool runTestBlockParallel(TestBlock &block);
         void run(TestBlock &block);
 
     public:
