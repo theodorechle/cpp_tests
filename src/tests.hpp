@@ -1,16 +1,12 @@
 #ifndef TESTS_HPP
 #define TESTS_HPP
 
+#include "thread_safe_queue.hpp"
 #include <chrono>
-#include <filesystem>
-#include <fstream>
 #include <functional>
-#include <iomanip>
-#include <iostream>
 #include <list>
-#include <mutex>
-#include <sstream>
 #include <string.h>
+#include <string>
 #include <sys/stat.h>
 #include <wait.h>
 
@@ -74,7 +70,6 @@ namespace test {
             bool parallel = true;
             std::list<Test> tests = std::list<Test>();
             std::list<TestBlock> innerBlocks = std::list<TestBlock>();
-            double time = .0;
             bool success = true;
         };
 
@@ -84,13 +79,21 @@ namespace test {
         std::chrono::steady_clock::time_point _startedGlobalTestsTimer;
         double _totalTime = .0;
 
-        bool lastTestWasSuccessful = true;
+        bool _lastTestWasSuccessful = true;
+
+        ThreadSafeQueue<Test *> _queue = {};
+
+        const unsigned int _maxThreads;
+
+        const bool _noProcesses;
+
+        std::mutex _mutex;
 
         void displayBlocks() const;
         void displayTestWithChrono(const Test &test, int testsNbSize) const;
-        void displayGlobalStats() const;
+        void displayGlobalStats();
 
-        void displayBlocksSummary(const TestBlock &blockToDisplay, int tabs = 0) const;
+        void displayBlocksSummary(const TestBlock &blockToDisplay, int tabs = 0);
 
         void displayTabsAndPipe(int tabs) const;
 
@@ -98,16 +101,25 @@ namespace test {
 
         void updateStats(Test &test);
 
-        // return true if test succeeded
-        bool afterTest(Test &test, int tmpChildStatus, std::chrono::steady_clock::time_point endTime);
+        void afterTest(Test &test, int tmpChildStatus, std::chrono::steady_clock::time_point endTime);
 
-        // return true if all tests succeeded
-        bool runTestBlock(TestBlock &block);
-        // return true if all tests succeeded
-        bool runTestBlockParallel(TestBlock &block);
         void run(TestBlock &block);
 
+        void runTestsInThread();
+
+        void runTestsInThreadNoProcesses();
+
     public:
+        /*
+         * maxThreads is the max number of threads which will run tests in parallel, minus 1 since the main thread will also run tests. It allows setting maxThreads to 0 and having tests running in main thread only for easier debugging.
+         * If maxThreads is -1, the number of threads is determined automatically using std::thread::hardware_concurrency.
+         * Note that since each thread can only run one process at a time, it also limits the number of parallel processes.
+         *
+         * If noProcesses is true, tests will run directly on the main process.
+         * It should only be used for debugging, since the use of processes allows to be resilient from test crashes.
+         */
+        Tests(int maxThreads = -1, bool noProcesses = false);
+
         void addTest(std::function<Result()> function, const std::string &testName = "");
 
         void beginTestBlock(const std::string &name, bool runTestsInParallel = true);

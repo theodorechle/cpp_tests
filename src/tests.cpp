@@ -1,4 +1,9 @@
 #include "tests.hpp"
+#include <chrono>
+#include <iomanip>
+#include <iostream>
+#include <mutex>
+#include <thread>
 
 namespace test {
     Result booleanToResult(bool value) { return value ? Result::SUCCESS : Result::FAILURE; }
@@ -43,7 +48,7 @@ namespace test {
         std::cout << " (" << test.name << ") " << "\n";
     }
 
-    void Tests::displayGlobalStats() const {
+    void Tests::displayGlobalStats() {
         std::cout << "Global stats:\n";
         std::cout << stats.nbTestsRunned << " tests in " << std::fixed << std::setprecision(CHRONO_FLOAT_SIZE) << _totalTime << "s\n";
         std::cout << "Successes: " << stats.nbSuccesses << "\n";
@@ -52,7 +57,7 @@ namespace test {
         std::cout << "Bad returns: " << stats.nbBadReturns << "\n";
     }
 
-    void Tests::displayBlocksSummary(const TestBlock &block, int tabs) const {
+    void Tests::displayBlocksSummary(const TestBlock &block, int tabs) {
         std::cout << "group '" << block.name << "': ";
 
         std::string resultString = resultToStr(block.success ? Result::SUCCESS : Result::FAILURE);
@@ -61,12 +66,7 @@ namespace test {
         else std::cout << TEST_RESULT_COLOR_FAILURE;
         std::cout << resultString << TEST_RESULT_COLOR_END;
 
-        std::cout
-            << std::string(NB_SPACES_BEFORE_CHRONO - resultString.size(), ' ')
-            << std::fixed
-            << std::setprecision(CHRONO_FLOAT_SIZE)
-            << block.time
-            << "s\n";
+        std::cout << std::string(NB_SPACES_BEFORE_CHRONO - resultString.size(), ' ') << "\n";
 
         int testsNbSize = std::to_string(stats.nbTests).size(); // for a nice formatting
         for (const Test &testToDisplay : block.tests) {
@@ -114,33 +114,38 @@ namespace test {
         }
     }
 
-    bool Tests::afterTest(Test &test, int tmpChildStatus, std::chrono::steady_clock::time_point endTime) {
+    void Tests::afterTest(Test &test, int tmpChildStatus, std::chrono::steady_clock::time_point endTime) {
+        std::lock_guard<std::mutex> lock(_mutex);
         int childStatus;
         char buffer[PIPE_BUFFER_SIZE];
         test.time = std::chrono::duration<double>(endTime - test.startTime).count();
 
-        displayNbTestsRunned(lastTestWasSuccessful, stats.nbTestsRunned + 1, stats.nbTests);
+        displayNbTestsRunned(_lastTestWasSuccessful, stats.nbTestsRunned + 1, stats.nbTests);
 
         if (WIFEXITED(tmpChildStatus)) {
             childStatus = WEXITSTATUS(tmpChildStatus);
             if (childStatus >= 0 && childStatus < static_cast<int>(Result::NB_RESULT_TYPES)) {
                 test.result = static_cast<Result>(childStatus);
             }
-            else std::cerr << "Child '" << test.pid << "'(" << test.name << ") exited with code '" << childStatus << "'\n";
+            else {
+                std::cerr << "Child '" << test.pid << "'(" << test.name << ") exited with code '" << childStatus << "'\n";
+            }
         }
         else if (WIFSIGNALED(tmpChildStatus)) {
             int signal = WTERMSIG(tmpChildStatus);
             std::cerr << "Child '" << test.pid << "'(" << test.name << ") terminated by signal '" << strsignal(signal) << "'\n";
         }
-        else std::cerr << "Test returned an invalid result.\n";
+        else {
+            std::cerr << "Test returned an invalid result.\n";
+        }
         if (WCOREDUMP((tmpChildStatus))) {
             std::cerr << "Child '" << test.pid << "'(" << test.name << ") produced a core dump\n";
         }
         updateStats(test);
 
-        lastTestWasSuccessful = test.result == Result::SUCCESS;
+        _lastTestWasSuccessful = test.result == Result::SUCCESS;
 
-        if (!lastTestWasSuccessful) {
+        if (!_lastTestWasSuccessful) {
             displayBlocks();
             std::cout << "Test n°" << test.number << " (" << test.name << "): ";
             if (test.result == Result::SUCCESS) std::cout << TEST_RESULT_COLOR_SUCCESS;
@@ -161,12 +166,19 @@ namespace test {
             }
             std::cout << "\n";
         }
-        return test.result == Result::SUCCESS;
+    }
+
+    Tests::Tests(int maxThreads, bool noProcesses)
+        : _maxThreads{maxThreads == -1 ? std::thread::hardware_concurrency() : static_cast<unsigned int>(maxThreads)}, _noProcesses{noProcesses} {
+#ifdef DEBUG
+        std::clog << "max threads: " << _maxThreads << "\n";
+#endif
     }
 
     void Tests::addTest(std::function<Result()> function, const std::string &testName) {
         stats.nbTests++;
         _currentBlock->tests.push_back(Test{function, testName, stats.nbTests});
+        _queue.push(&_currentBlock->tests.back());
     }
 
     void Tests::beginTestBlock(const std::string &name, bool runTestsInParallel) {
@@ -179,16 +191,16 @@ namespace test {
         _currentBlock = _currentBlock->parentBlock;
     }
 
-    bool Tests::runTestBlock(TestBlock &block) {
-        bool success = true;
-        for (Test &test : block.tests) {
+    void Tests::runTestsInThread() {
+        test::Tests::Test *test;
+        while (_queue.tryPop(&test)) {
             int _pipe[2];
 
             if (pipe(_pipe) == -1) {
                 perror("Can't create pipes");
                 exit(errno);
             }
-            test.startTime = std::chrono::steady_clock::now();
+            test->startTime = std::chrono::steady_clock::now();
             pid_t childPid = fork();
             switch (childPid) {
             case -1:
@@ -198,11 +210,11 @@ namespace test {
                 close(_pipe[0]);
                 dup2(_pipe[1], STDOUT_FILENO);
                 dup2(_pipe[1], STDERR_FILENO);
-                exit(static_cast<int>(test.function()));
+                exit(static_cast<int>(test->function()));
             default:
                 close(_pipe[1]);
-                test.pid = childPid;
-                test.pipe = _pipe[0];
+                test->pid = childPid;
+                test->pipe = _pipe[0];
                 int tmpChildStatus;
                 pid_t pid = wait(&tmpChildStatus);
                 std::chrono::steady_clock::time_point endTime = std::chrono::steady_clock::now();
@@ -211,67 +223,44 @@ namespace test {
                     exit(errno);
                 }
 
-                success = afterTest(test, tmpChildStatus, endTime) && success;
+                afterTest(*test, tmpChildStatus, endTime);
                 break;
             }
         }
-        return success;
     }
 
-    bool Tests::runTestBlockParallel(TestBlock &block) {
-        bool success = true;
-        for (Test &test : block.tests) {
-            int _pipe[2];
-
-            if (pipe(_pipe) == -1) {
-                perror("Can't create pipes");
-                exit(errno);
-            }
-            test.startTime = std::chrono::steady_clock::now();
-            pid_t childPid = fork();
-            switch (childPid) {
-            case -1:
-                perror("Can't fork test");
-                exit(errno);
-            case 0:
-                close(_pipe[0]);
-                dup2(_pipe[1], STDOUT_FILENO);
-                dup2(_pipe[1], STDERR_FILENO);
-                exit(static_cast<int>(test.function()));
-            default:
-                close(_pipe[1]);
-                test.pid = childPid;
-                test.pipe = _pipe[0];
-                break;
-            }
+    void Tests::runTestsInThreadNoProcesses() {
+        test::Tests::Test *test;
+        while (_queue.tryPop(&test)) {
+            test->startTime = std::chrono::steady_clock::now();
+            afterTest(*test, static_cast<int>(test->function()), std::chrono::steady_clock::now());
         }
-
-        for (size_t i = 0; i < block.tests.size(); i++) {
-            int tmpChildStatus;
-            pid_t pid = wait(&tmpChildStatus);
-            std::chrono::steady_clock::time_point endTime = std::chrono::steady_clock::now();
-            if (pid == -1) {
-                perror("Error while waiting childs");
-                exit(errno);
-            }
-
-            for (Test &test : block.tests) {
-                if (test.pid != pid) continue;
-                success = afterTest(test, tmpChildStatus, endTime) && success;
-                break;
-            }
-        }
-        return success;
     }
 
     void Tests::run(TestBlock &block) {
-        block.success = block.parallel ? runTestBlockParallel(block) : runTestBlock(block);
-
-        for (TestBlock &innerBlock : block.innerBlocks) {
-            std::chrono::steady_clock::time_point startedTimer = std::chrono::steady_clock::now();
-            run(innerBlock);
-            innerBlock.time = std::chrono::duration<double>(std::chrono::steady_clock::now() - startedTimer).count();
+        std::list<std::thread> threads = {};
+        for (unsigned int i = 0; i < _maxThreads; i++) {
+#ifdef DEBUG
+            std::unique_lock<std::mutex> lock(_mutex);
+            std::clog << "Starting thread " << i << "\n";
+            lock.unlock();
+#endif
+            threads.push_back(std::thread([this]() { _noProcesses ? runTestsInThreadNoProcesses() : runTestsInThread(); }));
         }
+
+        // main thread also participates, allow easy debugging by setting threads to 0 with noProcesses set on true, only main thread will be running
+        _noProcesses ? runTestsInThreadNoProcesses() : runTestsInThread();
+
+        for (std::thread &thread : threads) {
+#ifdef DEBUG
+            std::unique_lock<std::mutex> lock(_mutex);
+            std::clog << "Joining thread\n";
+            lock.unlock();
+#endif
+            thread.join();
+        }
+
+        // TODO: block.success
     }
 
     void Tests::runTests() {

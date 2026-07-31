@@ -13,6 +13,10 @@ OBJ_TESTS=$(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR)/%.o, $(SRC_TESTS))
 
 .PHONY: lib clean
 
+ifeq ($(DEBUG),1)
+CPP_FLAGS += -DDEBUG
+endif
+
 lib: $(LIB).a
 
 $(LIB).a: $(OBJ_TESTS)
