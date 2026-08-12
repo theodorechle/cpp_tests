@@ -101,7 +101,10 @@ namespace test {
 
         void updateStats(Test &test);
 
-        void afterTest(Test &test, int tmpChildStatus, std::chrono::steady_clock::time_point endTime);
+        /* if result != Result::NB_RESULT_TYPES, it removes all checks for tmpChildStatus
+         * it's useful for the "no process" testing function, since it doesn't have an actual "wait status", because it haven't called wait
+         * */
+        void afterTest(Test &test, int tmpChildStatus, std::chrono::steady_clock::time_point endTime, Result result = Result::NB_RESULT_TYPES);
 
         void run(TestBlock &block);
 

@@ -3,6 +3,7 @@
 #include <iomanip>
 #include <iostream>
 #include <mutex>
+#include <sys/wait.h>
 #include <thread>
 
 namespace test {
@@ -50,11 +51,19 @@ namespace test {
 
     void Tests::displayGlobalStats() {
         std::cout << "Global stats:\n";
-        std::cout << stats.nbTestsRunned << " tests in " << std::fixed << std::setprecision(CHRONO_FLOAT_SIZE) << _totalTime << "s\n";
-        std::cout << "Successes: " << stats.nbSuccesses << "\n";
-        std::cout << "Failures: " << stats.nbFailures << "\n";
-        std::cout << "Errors: " << stats.nbErrors << "\n";
-        std::cout << "Bad returns: " << stats.nbBadReturns << "\n";
+
+        std::cout << "Tests infos:\n";
+        std::cout << "\t" << stats.nbTestsRunned << " tests in " << std::fixed << std::setprecision(CHRONO_FLOAT_SIZE) << _totalTime << "s\n";
+        std::cout << "\tthreads: ";
+        if (_maxThreads == 0) std::cout << "main thread only\n";
+        else std::cout << _maxThreads << "\n";
+        std::cout << "\tprocess separated tests: " << (_noProcesses ? "no" : "yes") << "\n";
+
+        std::cout << "Tests results:\n";
+        std::cout << TEST_RESULT_COLOR_SUCCESS << "\tSuccesses: " << stats.nbSuccesses << TEST_RESULT_COLOR_END << "\n";
+        std::cout << TEST_RESULT_COLOR_FAILURE << "\tFailures: " << stats.nbFailures << TEST_RESULT_COLOR_END << "\n";
+        std::cout << TEST_RESULT_COLOR_FAILURE << "\tErrors: " << stats.nbErrors << TEST_RESULT_COLOR_END << "\n";
+        std::cout << TEST_RESULT_COLOR_FAILURE << "\tBad returns: " << stats.nbBadReturns << TEST_RESULT_COLOR_END << "\n";
     }
 
     void Tests::displayBlocksSummary(const TestBlock &block, int tabs) {
@@ -114,33 +123,38 @@ namespace test {
         }
     }
 
-    void Tests::afterTest(Test &test, int tmpChildStatus, std::chrono::steady_clock::time_point endTime) {
+    void Tests::afterTest(Test &test, int tmpChildStatus, std::chrono::steady_clock::time_point endTime, Result result) {
         std::lock_guard<std::mutex> lock(_mutex);
+        std::cerr << "status: " << tmpChildStatus << ", result: " << static_cast<int>(result) << "\n";
         int childStatus;
         char buffer[PIPE_BUFFER_SIZE];
         test.time = std::chrono::duration<double>(endTime - test.startTime).count();
 
         displayNbTestsRunned(_lastTestWasSuccessful, stats.nbTestsRunned + 1, stats.nbTests);
 
-        if (WIFEXITED(tmpChildStatus)) {
-            childStatus = WEXITSTATUS(tmpChildStatus);
-            if (childStatus >= 0 && childStatus < static_cast<int>(Result::NB_RESULT_TYPES)) {
-                test.result = static_cast<Result>(childStatus);
+        if (result != Result::NB_RESULT_TYPES) test.result = result;
+        else {
+            if (WIFEXITED(tmpChildStatus)) {
+                childStatus = WEXITSTATUS(tmpChildStatus);
+                if (childStatus >= 0 && childStatus < static_cast<int>(Result::NB_RESULT_TYPES)) {
+                    test.result = static_cast<Result>(childStatus);
+                }
+                else {
+                    std::cerr << "Child '" << test.pid << "'(" << test.name << ") exited with code '" << childStatus << "'\n";
+                }
+            }
+            else if (WIFSIGNALED(tmpChildStatus)) {
+                int signal = WTERMSIG(tmpChildStatus);
+                std::cerr << "Child '" << test.pid << "'(" << test.name << ") terminated by signal '" << strsignal(signal) << "'\n";
             }
             else {
-                std::cerr << "Child '" << test.pid << "'(" << test.name << ") exited with code '" << childStatus << "'\n";
+                std::cerr << "Test returned an invalid result.\n";
+            }
+            if (WCOREDUMP((tmpChildStatus))) {
+                std::cerr << "Child '" << test.pid << "'(" << test.name << ") produced a core dump\n";
             }
         }
-        else if (WIFSIGNALED(tmpChildStatus)) {
-            int signal = WTERMSIG(tmpChildStatus);
-            std::cerr << "Child '" << test.pid << "'(" << test.name << ") terminated by signal '" << strsignal(signal) << "'\n";
-        }
-        else {
-            std::cerr << "Test returned an invalid result.\n";
-        }
-        if (WCOREDUMP((tmpChildStatus))) {
-            std::cerr << "Child '" << test.pid << "'(" << test.name << ") produced a core dump\n";
-        }
+
         updateStats(test);
 
         _lastTestWasSuccessful = test.result == Result::SUCCESS;
@@ -201,6 +215,7 @@ namespace test {
                 exit(errno);
             }
             test->startTime = std::chrono::steady_clock::now();
+            int result;
             pid_t childPid = fork();
             switch (childPid) {
             case -1:
@@ -210,13 +225,16 @@ namespace test {
                 close(_pipe[0]);
                 dup2(_pipe[1], STDOUT_FILENO);
                 dup2(_pipe[1], STDERR_FILENO);
-                exit(static_cast<int>(test->function()));
+                result = static_cast<int>(test->function());
+                std::cerr << "result: " << result << "\n";
+                close(_pipe[1]);
+                exit(result);
             default:
                 close(_pipe[1]);
                 test->pid = childPid;
                 test->pipe = _pipe[0];
                 int tmpChildStatus;
-                pid_t pid = wait(&tmpChildStatus);
+                pid_t pid = waitpid(childPid, &tmpChildStatus, 0);
                 std::chrono::steady_clock::time_point endTime = std::chrono::steady_clock::now();
                 if (pid == -1) {
                     perror("Error while waiting childs");
@@ -224,6 +242,7 @@ namespace test {
                 }
 
                 afterTest(*test, tmpChildStatus, endTime);
+                close(_pipe[0]);
                 break;
             }
         }
@@ -232,8 +251,26 @@ namespace test {
     void Tests::runTestsInThreadNoProcesses() {
         test::Tests::Test *test;
         while (_queue.tryPop(&test)) {
+            int _pipe[2];
+            if (pipe(_pipe) == -1) {
+                perror("Can't create pipes");
+                exit(errno);
+            }
+            int savedStdout = dup(STDOUT_FILENO);
+            int savedStderr = dup(STDERR_FILENO);
+
+            dup2(_pipe[1], STDOUT_FILENO);
+            dup2(_pipe[1], STDERR_FILENO);
+            test->pid = -1;
+            test->pipe = _pipe[0];
+
             test->startTime = std::chrono::steady_clock::now();
-            afterTest(*test, static_cast<int>(test->function()), std::chrono::steady_clock::now());
+            Result result = test->function();
+            dup2(savedStdout, STDOUT_FILENO);
+            dup2(savedStderr, STDERR_FILENO);
+            close(_pipe[1]);
+            afterTest(*test, 0, std::chrono::steady_clock::now(), result);
+            close(_pipe[0]);
         }
     }
 
