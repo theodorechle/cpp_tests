@@ -2,7 +2,7 @@
 
 VERSION: 0.8.4
 
-Tests can be run in parallel in the same block.
+Tests are run in parallel in the same block.
 The library can use multiple threads to run the tests in parallel.
 
 # debug

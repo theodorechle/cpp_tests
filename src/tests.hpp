@@ -67,13 +67,12 @@ namespace test {
         struct TestBlock {
             std::string name;
             TestBlock *parentBlock = nullptr;
-            bool parallel = true;
             std::list<Test> tests = std::list<Test>();
             std::list<TestBlock> innerBlocks = std::list<TestBlock>();
             bool success = true;
         };
 
-        TestBlock _rootBlock = TestBlock{"", nullptr, false};
+        TestBlock _rootBlock = TestBlock{"", nullptr};
         TestBlock *_currentBlock = &_rootBlock;
 
         std::chrono::steady_clock::time_point _startedGlobalTestsTimer;
@@ -106,11 +105,11 @@ namespace test {
          * */
         void afterTest(Test &test, int tmpChildStatus, std::chrono::steady_clock::time_point endTime, Result result = Result::NB_RESULT_TYPES);
 
-        void run(TestBlock &block);
-
         void runTestsInThread();
 
         void runTestsInThreadNoProcesses();
+
+        void setBlockStatus(TestBlock &block);
 
     public:
         /*
@@ -125,7 +124,7 @@ namespace test {
 
         void addTest(std::function<Result()> function, const std::string &testName = "");
 
-        void beginTestBlock(const std::string &name, bool runTestsInParallel = true);
+        void beginTestBlock(const std::string &name);
 
         void endTestBlock();
 

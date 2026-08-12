@@ -67,6 +67,7 @@ namespace test {
     }
 
     void Tests::displayBlocksSummary(const TestBlock &block, int tabs) {
+
         std::cout << "group '" << block.name << "': ";
 
         std::string resultString = resultToStr(block.success ? Result::SUCCESS : Result::FAILURE);
@@ -195,8 +196,8 @@ namespace test {
         _queue.push(&_currentBlock->tests.back());
     }
 
-    void Tests::beginTestBlock(const std::string &name, bool runTestsInParallel) {
-        _currentBlock->innerBlocks.push_back(TestBlock{name, _currentBlock, runTestsInParallel});
+    void Tests::beginTestBlock(const std::string &name) {
+        _currentBlock->innerBlocks.push_back(TestBlock{name, _currentBlock});
         _currentBlock = &_currentBlock->innerBlocks.back();
     }
 
@@ -274,7 +275,22 @@ namespace test {
         }
     }
 
-    void Tests::run(TestBlock &block) {
+    void Tests::setBlockStatus(TestBlock &block) {
+        bool success = true;
+        for (TestBlock &childBlock : block.innerBlocks) {
+            setBlockStatus(childBlock);
+            success &= childBlock.success;
+        }
+        for (Test &test : block.tests) {
+            success &= test.result == Result::SUCCESS;
+        }
+        block.success = success;
+    }
+
+    void Tests::runTests() {
+        _startedGlobalTestsTimer = std::chrono::steady_clock::now();
+        displayNbTestsRunned(false, stats.nbTestsRunned, stats.nbTests);
+
         std::list<std::thread> threads = {};
         for (unsigned int i = 0; i < _maxThreads; i++) {
 #ifdef DEBUG
@@ -297,14 +313,9 @@ namespace test {
             thread.join();
         }
 
-        // TODO: block.success
-    }
-
-    void Tests::runTests() {
-        _startedGlobalTestsTimer = std::chrono::steady_clock::now();
-        displayNbTestsRunned(false, stats.nbTestsRunned, stats.nbTests);
-        run(_rootBlock);
         _totalTime = std::chrono::duration<double>(std::chrono::steady_clock::now() - _startedGlobalTestsTimer).count();
+
+        setBlockStatus(_rootBlock);
     }
 
     void Tests::displaySummary() {
