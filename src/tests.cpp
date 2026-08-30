@@ -238,7 +238,7 @@ namespace test {
                 pid_t pid = waitpid(childPid, &tmpChildStatus, 0);
                 std::chrono::steady_clock::time_point endTime = std::chrono::steady_clock::now();
                 if (pid == -1) {
-                    perror("Error while waiting childs");
+                    perror("Error while waiting children");
                     exit(errno);
                 }
 
