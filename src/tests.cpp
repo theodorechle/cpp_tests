@@ -206,8 +206,34 @@ namespace test {
         _currentBlock = _currentBlock->parentBlock;
     }
 
+    void Tests::parentCode(int _pipe[2], pid_t childPid, Test *test) {
+        close(_pipe[1]);
+        test->pid = childPid;
+        test->pipe = _pipe[0];
+        int tmpChildStatus;
+        pid_t pid = waitpid(childPid, &tmpChildStatus, 0);
+        std::chrono::steady_clock::time_point endTime = std::chrono::steady_clock::now();
+        if (pid == -1) {
+            perror("Error while waiting children");
+            exit(errno);
+        }
+
+        afterTest(*test, tmpChildStatus, endTime);
+        close(_pipe[0]);
+    }
+
+    void Tests::childCode(int _pipe[2], Test *test) {
+        close(_pipe[0]);
+        dup2(_pipe[1], STDOUT_FILENO);
+        dup2(_pipe[1], STDERR_FILENO);
+        int result = static_cast<int>(test->function());
+        std::cerr << "result: " << result << "\n";
+        close(_pipe[1]);
+        exit(result);
+    }
+
     void Tests::runTestsInThread() {
-        test::Tests::Test *test;
+        Test *test;
         while (_queue.tryPop(&test)) {
             int _pipe[2];
 
@@ -216,34 +242,15 @@ namespace test {
                 exit(errno);
             }
             test->startTime = std::chrono::steady_clock::now();
-            int result;
             pid_t childPid = fork();
             switch (childPid) {
             case -1:
                 perror("Can't fork test");
                 exit(errno);
             case 0:
-                close(_pipe[0]);
-                dup2(_pipe[1], STDOUT_FILENO);
-                dup2(_pipe[1], STDERR_FILENO);
-                result = static_cast<int>(test->function());
-                std::cerr << "result: " << result << "\n";
-                close(_pipe[1]);
-                exit(result);
+                childCode(_pipe, test);
             default:
-                close(_pipe[1]);
-                test->pid = childPid;
-                test->pipe = _pipe[0];
-                int tmpChildStatus;
-                pid_t pid = waitpid(childPid, &tmpChildStatus, 0);
-                std::chrono::steady_clock::time_point endTime = std::chrono::steady_clock::now();
-                if (pid == -1) {
-                    perror("Error while waiting children");
-                    exit(errno);
-                }
-
-                afterTest(*test, tmpChildStatus, endTime);
-                close(_pipe[0]);
+                parentCode(_pipe, childPid, test);
                 break;
             }
         }

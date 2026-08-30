@@ -105,17 +105,14 @@ namespace test {
          * */
         void afterTest(Test &test, int tmpChildStatus, std::chrono::steady_clock::time_point endTime, Result result = Result::NB_RESULT_TYPES);
 
-        void runTestsInThread();
-
-        void runTestsInThreadNoProcesses();
-
         void setBlockStatus(TestBlock &block);
 
     public:
         /*
-         * maxThreads is the max number of threads which will run tests in parallel, minus 1 since the main thread will also run tests. It allows setting maxThreads to 0 and having tests running in main thread only for easier debugging.
-         * If maxThreads is -1, the number of threads is determined automatically using std::thread::hardware_concurrency.
-         * Note that since each thread can only run one process at a time, it also limits the number of parallel processes.
+         * maxThreads is the max number of threads which will run tests in parallel, minus 1 since the main thread will also run tests. It allows
+         * setting maxThreads to 0 and having tests running in main thread only for easier debugging. If maxThreads is -1, the number of threads is
+         * determined automatically using std::thread::hardware_concurrency. Note that since each thread can only run one process at a time, it also
+         * limits the number of parallel processes.
          *
          * If noProcesses is true, tests will run directly on the main process.
          * It should only be used for debugging, since the use of processes allows to be resilient from test crashes.
@@ -128,6 +125,15 @@ namespace test {
 
         void endTestBlock();
 
+    private:
+        void parentCode(int _pipe[2], pid_t childPid, Test *test);
+        void childCode(int _pipe[2], Test *test);
+
+        void runTestsInThread();
+
+        void runTestsInThreadNoProcesses();
+
+    public:
         void runTests();
 
         void displaySummary();
