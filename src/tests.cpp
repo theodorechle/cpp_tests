@@ -126,7 +126,6 @@ namespace test {
 
     void Tests::afterTest(Test &test, int tmpChildStatus, std::chrono::steady_clock::time_point endTime, Result result) {
         std::lock_guard<std::mutex> lock(_mutex);
-        std::cerr << "status: " << tmpChildStatus << ", result: " << static_cast<int>(result) << "\n";
         int childStatus;
         char buffer[PIPE_BUFFER_SIZE];
         test.time = std::chrono::duration<double>(endTime - test.startTime).count();
