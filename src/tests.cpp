@@ -1,12 +1,15 @@
 #include "tests.hpp"
 #include <chrono>
+#include <condition_variable>
 #include <iomanip>
 #include <iostream>
 #include <mutex>
 #include <sys/wait.h>
-#include <thread>
 
 namespace test {
+    std::condition_variable mainThreadCondition;
+    std::mutex mainThreadMutex;
+
     Result booleanToResult(bool value) { return value ? Result::SUCCESS : Result::FAILURE; }
 
     std::string resultToStr(Result result) {
@@ -54,10 +57,8 @@ namespace test {
 
         std::cout << "Tests infos:\n";
         std::cout << "\t" << stats.nbTestsRunned << " tests in " << std::fixed << std::setprecision(CHRONO_FLOAT_SIZE) << _totalTime << "s\n";
-        std::cout << "\tthreads: ";
-        if (_maxThreads == 0) std::cout << "main thread only\n";
-        else std::cout << _maxThreads << "\n";
-        std::cout << "\tprocess separated tests: " << (_noProcesses ? "no" : "yes") << "\n";
+        std::cout << "\tthreads: " << _maxThreads << "\n";
+        std::cout << "\tdebug: " << (_debug ? "yes" : "no") << "\n";
 
         std::cout << "Tests results:\n";
         std::cout << TEST_RESULT_COLOR_SUCCESS << "\tSuccesses: " << stats.nbSuccesses << TEST_RESULT_COLOR_END << "\n";
@@ -124,18 +125,11 @@ namespace test {
         }
     }
 
-    void Tests::afterTest(Test &test, int tmpChildStatus, std::chrono::steady_clock::time_point endTime, Result result) {
-        std::lock_guard<std::mutex> lock(_mutex);
-        int childStatus;
-        char buffer[PIPE_BUFFER_SIZE];
-        test.time = std::chrono::duration<double>(endTime - test.startTime).count();
-
-        displayNbTestsRunned(_lastTestWasSuccessful, stats.nbTestsRunned + 1, stats.nbTests);
-
+    void Tests::setTestResultFromReturnStatus(int returnStatus, Test &test, Result result) {
         if (result != Result::NB_RESULT_TYPES) test.result = result;
         else {
-            if (WIFEXITED(tmpChildStatus)) {
-                childStatus = WEXITSTATUS(tmpChildStatus);
+            if (WIFEXITED(returnStatus)) {
+                int childStatus = WEXITSTATUS(returnStatus);
                 if (childStatus >= 0 && childStatus < static_cast<int>(Result::NB_RESULT_TYPES)) {
                     test.result = static_cast<Result>(childStatus);
                 }
@@ -143,47 +137,65 @@ namespace test {
                     std::cerr << "Child '" << test.pid << "'(" << test.name << ") exited with code '" << childStatus << "'\n";
                 }
             }
-            else if (WIFSIGNALED(tmpChildStatus)) {
-                int signal = WTERMSIG(tmpChildStatus);
+            else if (WIFSIGNALED(returnStatus)) {
+                int signal = WTERMSIG(returnStatus);
                 std::cerr << "Child '" << test.pid << "'(" << test.name << ") terminated by signal '" << strsignal(signal) << "'\n";
             }
             else {
                 std::cerr << "Test returned an invalid result.\n";
             }
-            if (WCOREDUMP((tmpChildStatus))) {
+            if (WCOREDUMP((returnStatus))) {
                 std::cerr << "Child '" << test.pid << "'(" << test.name << ") produced a core dump\n";
             }
         }
-
-        updateStats(test);
-
-        _lastTestWasSuccessful = test.result == Result::SUCCESS;
-
-        if (!_lastTestWasSuccessful) {
-            displayBlocks();
-            std::cout << "Test n°" << test.number << " (" << test.name << "): ";
-            if (test.result == Result::SUCCESS) std::cout << TEST_RESULT_COLOR_SUCCESS;
-            else std::cout << TEST_RESULT_COLOR_FAILURE;
-            std::cout << resultToStr(test.result) << TEST_RESULT_COLOR_END << "\n" << "LOGS:\n";
-            bool reading = true;
-            while (reading) {
-                ssize_t readSize = read(test.pipe, buffer, PIPE_BUFFER_SIZE);
-                if (readSize == 0) reading = false;
-                else if (readSize == -1) {
-                    perror("Can't read from child's pipe");
-                    exit(errno);
-                }
-                else {
-                    buffer[readSize] = '\0';
-                    std::cout << buffer;
-                }
-            }
-            std::cout << "\n";
-        }
     }
 
-    Tests::Tests(int maxThreads, bool noProcesses)
-        : _maxThreads{maxThreads == -1 ? std::thread::hardware_concurrency() : static_cast<unsigned int>(maxThreads)}, _noProcesses{noProcesses} {
+    void Tests::displayLogs(Test &test) {
+        char buffer[PIPE_BUFFER_SIZE];
+
+        displayBlocks();
+        std::cout
+            << "Test n°"
+            << test.number
+            << " ("
+            << test.name
+            << "): "
+            << TEST_RESULT_COLOR_FAILURE
+            << resultToStr(test.result)
+            << TEST_RESULT_COLOR_END
+            << "\n"
+            << "LOGS:\n";
+        bool reading = true;
+        while (reading) {
+            ssize_t readSize = read(test.readPipe, buffer, PIPE_BUFFER_SIZE);
+            if (readSize == 0) reading = false;
+            else if (readSize == -1) {
+                perror("Can't read from child's pipe");
+                exit(errno);
+            }
+            else {
+                buffer[readSize] = '\0';
+                std::cout << buffer;
+            }
+        }
+        std::cout << "\n";
+    }
+
+    void Tests::afterTest(TestResult &result) {
+        result.test->time = std::chrono::duration<double>(result.endTime - result.test->startTime).count();
+
+        displayNbTestsRunned(_lastTestWasSuccessful, stats.nbTestsRunned + 1, stats.nbTests);
+        setTestResultFromReturnStatus(result.childStatus, *result.test, result.result);
+        updateStats(*result.test);
+
+        _lastTestWasSuccessful = result.test->result == Result::SUCCESS;
+        if (!_lastTestWasSuccessful) {
+            displayLogs(*result.test);
+        }
+        close(result.test->readPipe);
+    }
+
+    Tests::Tests(uint maxThreads, bool debug) : _maxThreads{maxThreads == 0 ? std::thread::hardware_concurrency() : maxThreads}, _debug{debug} {
 #ifdef DEBUG
         std::clog << "max threads: " << _maxThreads << "\n";
 #endif
@@ -208,17 +220,15 @@ namespace test {
     void Tests::parentCode(int _pipe[2], pid_t childPid, Test *test) {
         close(_pipe[1]);
         test->pid = childPid;
-        test->pipe = _pipe[0];
+        test->readPipe = _pipe[0];
         int tmpChildStatus;
         pid_t pid = waitpid(childPid, &tmpChildStatus, 0);
-        std::chrono::steady_clock::time_point endTime = std::chrono::steady_clock::now();
         if (pid == -1) {
             perror("Error while waiting children");
             exit(errno);
         }
 
-        afterTest(*test, tmpChildStatus, endTime);
-        close(_pipe[0]);
+        results.push(TestResult{.test = test, .childStatus = tmpChildStatus, .endTime = std::chrono::steady_clock::now()});
     }
 
     void Tests::childCode(int _pipe[2], Test *test) {
@@ -226,7 +236,6 @@ namespace test {
         dup2(_pipe[1], STDOUT_FILENO);
         dup2(_pipe[1], STDERR_FILENO);
         int result = static_cast<int>(test->function());
-        std::cerr << "result: " << result << "\n";
         close(_pipe[1]);
         exit(result);
     }
@@ -255,7 +264,7 @@ namespace test {
         }
     }
 
-    void Tests::runTestsInThreadNoProcesses() {
+    void Tests::runTestsInMainProcess() {
         test::Tests::Test *test;
         while (_queue.tryPop(&test)) {
             int _pipe[2];
@@ -269,22 +278,22 @@ namespace test {
             dup2(_pipe[1], STDOUT_FILENO);
             dup2(_pipe[1], STDERR_FILENO);
             test->pid = -1;
-            test->pipe = _pipe[0];
+            test->readPipe = _pipe[0];
 
             test->startTime = std::chrono::steady_clock::now();
             Result result = test->function();
             dup2(savedStdout, STDOUT_FILENO);
             dup2(savedStderr, STDERR_FILENO);
             close(_pipe[1]);
-            afterTest(*test, 0, std::chrono::steady_clock::now(), result);
-            close(_pipe[0]);
+            TestResult testResult = TestResult{.test = test, .childStatus = 0, .endTime = std::chrono::steady_clock::now(), .result = result};
+            afterTest(testResult);
         }
     }
 
-    void Tests::setBlockStatus(TestBlock &block) {
+    void Tests::setBlocksStatus(TestBlock &block) {
         bool success = true;
         for (TestBlock &childBlock : block.innerBlocks) {
-            setBlockStatus(childBlock);
+            setBlocksStatus(childBlock);
             success &= childBlock.success;
         }
         for (Test &test : block.tests) {
@@ -293,35 +302,48 @@ namespace test {
         block.success = success;
     }
 
+    void Tests::spawnThreads() {
+        for (uint i = 0; i < _maxThreads; i++) {
+#ifdef DEBUG
+            std::clog << "Starting thread " << i << "\n";
+#endif
+            threads.push_back(std::thread([this]() { runTestsInThread(); }));
+        }
+    }
+
+    void Tests::joinThreads() {
+        for (std::thread &thread : threads) {
+#ifdef DEBUG
+            std::clog << "Joining thread\n";
+#endif
+            thread.join();
+        }
+    }
+
+    void Tests::processTestsResults() {
+        TestResult result;
+        while (stats.nbTestsRunned < stats.nbTests) {
+            results.waitAndPop(&result);
+            afterTest(result);
+        }
+    }
+
     void Tests::runTests() {
         _startedGlobalTestsTimer = std::chrono::steady_clock::now();
         displayNbTestsRunned(false, stats.nbTestsRunned, stats.nbTests);
 
-        std::list<std::thread> threads = {};
-        for (unsigned int i = 0; i < _maxThreads; i++) {
-#ifdef DEBUG
-            std::unique_lock<std::mutex> lock(_mutex);
-            std::clog << "Starting thread " << i << "\n";
-            lock.unlock();
-#endif
-            threads.push_back(std::thread([this]() { _noProcesses ? runTestsInThreadNoProcesses() : runTestsInThread(); }));
+        if (_debug) {
+            runTestsInMainProcess();
         }
-
-        // main thread also participates, allow easy debugging by setting threads to 0 with noProcesses set on true, only main thread will be running
-        _noProcesses ? runTestsInThreadNoProcesses() : runTestsInThread();
-
-        for (std::thread &thread : threads) {
-#ifdef DEBUG
-            std::unique_lock<std::mutex> lock(_mutex);
-            std::clog << "Joining thread\n";
-            lock.unlock();
-#endif
-            thread.join();
+        else {
+            spawnThreads();
+            processTestsResults();
+            joinThreads();
         }
 
         _totalTime = std::chrono::duration<double>(std::chrono::steady_clock::now() - _startedGlobalTestsTimer).count();
 
-        setBlockStatus(_rootBlock);
+        setBlocksStatus(_rootBlock);
     }
 
     void Tests::displaySummary() {

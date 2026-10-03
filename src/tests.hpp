@@ -8,6 +8,8 @@
 #include <string.h>
 #include <string>
 #include <sys/stat.h>
+#include <sys/types.h>
+#include <thread>
 #include <wait.h>
 
 namespace test {
@@ -60,7 +62,7 @@ namespace test {
             std::chrono::steady_clock::time_point startTime;
             double time;
             pid_t pid;
-            int pipe;
+            int readPipe;
             Result result = Result::BAD_RETURN;
         };
 
@@ -70,6 +72,16 @@ namespace test {
             std::list<Test> tests = std::list<Test>();
             std::list<TestBlock> innerBlocks = std::list<TestBlock>();
             bool success = true;
+        };
+
+        /* if result != Result::NB_RESULT_TYPES, it removes all checks for tmpChildStatus in the afterTest method
+         * it's useful for the "no process" testing function, since it doesn't have an actual "wait status", because it haven't called wait
+         * */
+        struct TestResult {
+            Test *test;
+            int childStatus;
+            std::chrono::steady_clock::time_point endTime;
+            Result result = Result::NB_RESULT_TYPES;
         };
 
         TestBlock _rootBlock = TestBlock{"", nullptr};
@@ -82,11 +94,15 @@ namespace test {
 
         ThreadSafeQueue<Test *> _queue = {};
 
-        const unsigned int _maxThreads;
+        const uint _maxThreads;
 
-        const bool _noProcesses;
+        const bool _debug;
 
         std::mutex _mutex;
+
+        std::list<std::thread> threads = {};
+
+        ThreadSafeQueue<TestResult> results = ThreadSafeQueue<TestResult>();
 
         void displayBlocks() const;
         void displayTestWithChrono(const Test &test, int testsNbSize) const;
@@ -100,24 +116,24 @@ namespace test {
 
         void updateStats(Test &test);
 
-        /* if result != Result::NB_RESULT_TYPES, it removes all checks for tmpChildStatus
-         * it's useful for the "no process" testing function, since it doesn't have an actual "wait status", because it haven't called wait
-         * */
-        void afterTest(Test &test, int tmpChildStatus, std::chrono::steady_clock::time_point endTime, Result result = Result::NB_RESULT_TYPES);
+        void setTestResultFromReturnStatus(int returnStatus, Test &test, Result result = Result::NB_RESULT_TYPES);
 
-        void setBlockStatus(TestBlock &block);
+        void displayLogs(Test &test);
+
+        void afterTest(TestResult &result);
+
+        void setBlocksStatus(TestBlock &block);
 
     public:
         /*
-         * maxThreads is the max number of threads which will run tests in parallel, minus 1 since the main thread will also run tests. It allows
-         * setting maxThreads to 0 and having tests running in main thread only for easier debugging. If maxThreads is -1, the number of threads is
+         * maxThreads is the max number of threads which will run tests in parallel. If maxThreads is 0, the number of threads is
          * determined automatically using std::thread::hardware_concurrency. Note that since each thread can only run one process at a time, it also
          * limits the number of parallel processes.
          *
-         * If noProcesses is true, tests will run directly on the main process.
+         * If debug is true, tests will run directly on the main process.
          * It should only be used for debugging, since the use of processes allows to be resilient from test crashes.
          */
-        Tests(int maxThreads = -1, bool noProcesses = false);
+        Tests(uint maxThreads = 0, bool debug = false);
 
         void addTest(std::function<Result()> function, const std::string &testName = "");
 
@@ -130,8 +146,11 @@ namespace test {
         void childCode(int _pipe[2], Test *test);
 
         void runTestsInThread();
+        void runTestsInMainProcess();
 
-        void runTestsInThreadNoProcesses();
+        void spawnThreads();
+        void joinThreads();
+        void processTestsResults();
 
     public:
         void runTests();
