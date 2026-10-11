@@ -1,34 +1,64 @@
-CPP_C=g++
-CPP_FLAGS=-std=c++23 -Wall -g -MMD -MP
-BIN_DIR=bin
-OBJ_DIR=obj
-SRC_DIR=src
-LIB=bin/cpp_tests_lib
+CPP_C:=g++
+CPP_FLAGS:=-std=c++23 -Wall -Werror -g -MMD -MP -Iinclude -Isrc -fpic
+LIB_FLAGS:=-shared
+BIN_DIR:=bin
+OBJ_DIR:=obj
+SRC_DIR:=src
+
+INSTALL_PATH:=/usr/local
+LIB_INSTALL_PATH:=$(INSTALL_PATH)/lib
+INCLUDE_INSTALL_PATH:=$(INSTALL_PATH)/include
+
+NAME:=cpptests
+MAJOR_VERSION:=1
+VERSION:=$(MAJOR_VERSION).0.0
+
+LIB:=lib$(NAME).so.$(VERSION)
+MAJOR_LIB:=lib$(NAME).so.$(MAJOR_VERSION)
+LIB_NO_VERSION:=lib$(NAME).so
 
 # Source files
-SRC_TESTS=$(wildcard $(SRC_DIR)/*.cpp)
+SRC:=$(wildcard $(SRC_DIR)/*.cpp)
 
 # Object files
-OBJ_TESTS=$(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR)/%.o, $(SRC_TESTS))
+OBJ:=$(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR)/%.o, $(SRC))
 
-.PHONY: lib clean
+.PHONY: lib clean install uninstall
 
 ifeq ($(DEBUG),1)
 CPP_FLAGS += -DDEBUG
 endif
 
-lib: $(LIB).a
+lib: $(BIN_DIR)/$(LIB)
 
-$(LIB).a: $(OBJ_TESTS)
-	@mkdir -p $(BIN_DIR)
-	ar -r $@ $^
+$(BIN_DIR)/$(LIB): $(OBJ)
+	@mkdir -p $(@D)
+	$(CPP_C) $(LIB_FLAGS) -Wl,-soname,$(LIB_NO_VERSION) -o $@ $^
+
+	ln -sfn $(LIB) $(BIN_DIR)/$(MAJOR_LIB)
+	ln -sfn $(MAJOR_LIB) $(BIN_DIR)/$(LIB_NO_VERSION)
 
 # Rule for compiling all object files
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
-	@mkdir -p $(dir $@)
+	@mkdir -p $(@D)
 	$(CPP_C) $(CPP_FLAGS) -c $< -o $@
 
 # Clean all generated files
 clean:
-	@find obj -mindepth 1 ! -name .gitkeep -delete
-	@find bin -mindepth 1 ! -name .gitkeep -delete
+	rm -rf bin obj
+
+install: $(BIN_DIR)/$(LIB)
+	install -d $(LIB_INSTALL_PATH)
+	rm -f $(LIB_INSTALL_PATH)/$(MAJOR_LIB)*
+	install -m 755 $(BIN_DIR)/$(LIB) $(LIB_INSTALL_PATH)/$(LIB)
+	install -d $(INCLUDE_INSTALL_PATH)/$(NAME)
+
+
+	ln -sfn $(LIB) $(LIB_INSTALL_PATH)/$(MAJOR_LIB)
+	ln -sfn $(MAJOR_LIB) $(LIB_INSTALL_PATH)/$(LIB_NO_VERSION)
+
+	install -m 644 include/$(NAME)/*.hpp $(INCLUDE_INSTALL_PATH)/$(NAME)/
+
+uninstall:
+	rm $(LIB_INSTALL_PATH)/$(LIB) $(LIB_INSTALL_PATH)/$(MAJOR_LIB) $(LIB_INSTALL_PATH)/$(LIB_NO_VERSION)
+	rm -r $(INCLUDE_INSTALL_PATH)/$(NAME)

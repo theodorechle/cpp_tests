@@ -1,4 +1,4 @@
-#include "tests.hpp"
+#include <cpptests/tests.hpp>
 #include <chrono>
 #include <condition_variable>
 #include <iomanip>
@@ -57,8 +57,12 @@ namespace test {
 
         std::cout << "Tests infos:\n";
         std::cout << "\t" << stats.nbTestsRunned << " tests in " << std::fixed << std::setprecision(CHRONO_FLOAT_SIZE) << _totalTime << "s\n";
-        std::cout << "\tthreads: " << _maxThreads << "\n";
-        std::cout << "\tdebug: " << (_debug ? "yes" : "no") << "\n";
+        if (_debug) {
+            std::cout << "\tdebug\n";
+        }
+        else {
+            std::cout << "\tthreads: " << _maxThreads << "\n";
+        }
 
         std::cout << "Tests results:\n";
         std::cout << TEST_RESULT_COLOR_SUCCESS << "\tSuccesses: " << stats.nbSuccesses << TEST_RESULT_COLOR_END << "\n";

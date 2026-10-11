@@ -1,6 +1,6 @@
 # cpp_tests
 
-VERSION: 0.8.4
+VERSION: 1.0.0
 
 Tests are run in parallel in the same block.
 The library can use multiple threads to run the tests in parallel.

@@ -5,6 +5,7 @@
 #include <chrono>
 #include <functional>
 #include <list>
+#include <mutex>
 #include <string.h>
 #include <string>
 #include <sys/stat.h>
@@ -130,7 +131,7 @@ namespace test {
          * determined automatically using std::thread::hardware_concurrency. Note that since each thread can only run one process at a time, it also
          * limits the number of parallel processes.
          *
-         * If debug is true, tests will run directly on the main process.
+         * If debug is true, tests will run directly on the main process, without supplementary threads (maxThreads is ignored).
          * It should only be used for debugging, since the use of processes allows to be resilient from test crashes.
          */
         Tests(uint maxThreads = 0, bool debug = false);
