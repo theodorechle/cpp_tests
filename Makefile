@@ -5,7 +5,7 @@ BIN_DIR:=bin
 OBJ_DIR:=obj
 SRC_DIR:=src
 
-INSTALL_PATH:=/usr/local
+INSTALL_PATH?=/usr/local
 LIB_INSTALL_PATH:=$(INSTALL_PATH)/lib
 INCLUDE_INSTALL_PATH:=$(INSTALL_PATH)/include
 
