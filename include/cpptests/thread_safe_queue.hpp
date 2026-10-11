@@ -2,7 +2,6 @@
 #define THREAD_SAFE_QUEUE_HPP
 
 #include <condition_variable>
-#include <iostream>
 #include <mutex>
 #include <queue>
 
@@ -40,11 +39,8 @@ public:
         std::unique_lock<std::mutex> lock(_mutex);
 
         _condition.wait(lock, [this] {
-            std::cerr << _queue.size() << "\n";
             return !_queue.empty();
         });
-
-        std::cerr << &_queue.front() << "\n";
 
         (*value) = _queue.front();
         _queue.pop();
